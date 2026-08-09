@@ -53,7 +53,7 @@ export default function ProductList() {
     setTimeout(() => setIsLoading(false), 150);
   };
 
-  const ITEMS_PER_PAGE = 8;
+  const ITEMS_PER_PAGE = 6;
 
   const dynamicCategories = useMemo(() => {
     const activeCats = globalCategories.filter(c => c.status === 'active');
@@ -290,7 +290,11 @@ export default function ProductList() {
                       type="button"
                       className="page-btn"
                       disabled={currentPage === 1}
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      onClick={() => {
+                        const newP = Math.max(currentPage - 1, 1);
+                        setCurrentPage(newP);
+                        window.scrollTo({ top: 120, behavior: 'smooth' });
+                      }}
                     >
                       « Trước
                     </button>
@@ -300,7 +304,10 @@ export default function ProductList() {
                       <button
                         type="button"
                         className={`page-btn ${currentPage === page ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(page)}
+                        onClick={() => {
+                          setCurrentPage(page);
+                          window.scrollTo({ top: 120, behavior: 'smooth' });
+                        }}
                       >
                         {page}
                       </button>
@@ -311,7 +318,11 @@ export default function ProductList() {
                       type="button"
                       className="page-btn"
                       disabled={currentPage === totalPages}
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      onClick={() => {
+                        const newP = Math.min(currentPage + 1, totalPages);
+                        setCurrentPage(newP);
+                        window.scrollTo({ top: 120, behavior: 'smooth' });
+                      }}
                     >
                       Sau »
                     </button>
