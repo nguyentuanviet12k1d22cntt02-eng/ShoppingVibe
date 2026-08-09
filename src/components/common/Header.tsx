@@ -55,6 +55,16 @@ export default function Header() {
             <li><Link href="/product-list" className={`nav-link ${pathname.startsWith('/product-list') ? 'active' : ''}`}>Sản phẩm</Link></li>
             <li><Link href="/product-list?category=goc-goc" className="nav-link">Gốm Bát Tràng</Link></li>
             <li><Link href="/product-list?category=may-tre" className="nav-link">Mây Tre Đan</Link></li>
+            <li>
+              <Link
+                href="/order-tracking"
+                className={`nav-link ${pathname.startsWith('/order-tracking') ? 'active' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <i className="fa-solid fa-box-open" style={{ color: 'var(--primary-color)' }}></i>
+                <span>Đơn hàng của tôi</span>
+              </Link>
+            </li>
           </ul>
 
           {/* Search Bar */}

@@ -306,9 +306,18 @@ export default function CheckoutPage() {
               <p style={{ color: 'var(--text-muted)', lineHeight: '1.6', marginBottom: '24px' }}>
                 Cảm ơn bạn đã lựa chọn Mini Shop! Chúng tôi đã tiếp nhận đơn hàng và sẽ liên hệ xác nhận trong thời gian sớm nhất.
               </p>
-              <Link href="/" className="btn btn-primary btn-lg" style={{ width: '100%' }}>
-                Về Trang chủ <i className="fa-solid fa-house"></i>
-              </Link>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link
+                  href={`/order-tracking?id=${orderCode}`}
+                  className="btn btn-accent btn-lg"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-truck-fast"></i> Theo dõi đơn hàng
+                </Link>
+                <Link href="/" className="btn btn-outline btn-md" style={{ width: '100%' }}>
+                  Về Trang chủ <i className="fa-solid fa-house"></i>
+                </Link>
+              </div>
             </div>
           </div>
         )}
