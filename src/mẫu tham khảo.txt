@@ -1,0 +1,116 @@
+my-next-app/
+├── src/
+│   ├── app/
+│   │   ├── (public)/
+│   │   │   ├── page.tsx
+│   │   │   ├── about/
+│   │   │   │   └── page.tsx
+│   │   │   └── contact/
+│   │   │       └── page.tsx
+│   │   │
+│   │   ├── (auth)/
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx
+│   │   │   └── register/
+│   │   │       └── page.tsx
+│   │   │
+│   │   ├── dashboard/
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── users/
+│   │   │   │   └── page.tsx
+│   │   │   └── settings/
+│   │   │       └── page.tsx
+│   │   │
+│   │   ├── api/
+│   │   │   └── users/
+│   │   │       └── route.ts
+│   │   │
+│   │   ├── layout.tsx
+│   │   ├── not-found.tsx
+│   │   ├── error.tsx
+│   │   └── globals.css
+│   │
+│   ├── components/
+│   │   ├── ui/
+│   │   │   ├── Button.tsx
+│   │   │   ├── Input.tsx
+│   │   │   ├── Modal.tsx
+│   │   │   └── Card.tsx
+│   │   │
+│   │   ├── layout/
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   └── Footer.tsx
+│   │   │
+│   │   └── shared/
+│   │       ├── Loading.tsx
+│   │       └── EmptyState.tsx
+│   │
+│   ├── features/
+│   │   ├── auth/
+│   │   │   ├── components/
+│   │   │   │   ├── LoginForm.tsx
+│   │   │   │   └── RegisterForm.tsx
+│   │   │   ├── actions/
+│   │   │   │   └── auth.actions.ts
+│   │   │   ├── api/
+│   │   │   │   └── auth.api.ts
+│   │   │   ├── schemas/
+│   │   │   │   └── auth.schema.ts
+│   │   │   └── types/
+│   │   │       └── auth.types.ts
+│   │   │
+│   │   ├── users/
+│   │   │   ├── components/
+│   │   │   ├── actions/
+│   │   │   ├── api/
+│   │   │   ├── schemas/
+│   │   │   └── types/
+│   │   │
+│   │   └── products/
+│   │       ├── components/
+│   │       ├── actions/
+│   │       ├── api/
+│   │       ├── schemas/
+│   │       └── types/
+│   │
+│   ├── lib/
+│   │   ├── db.ts
+│   │   ├── auth.ts
+│   │   ├── api-client.ts
+│   │   ├── utils.ts
+│   │   └── validations.ts
+│   │
+│   ├── hooks/
+│   │   ├── useDebounce.ts
+│   │   └── useMediaQuery.ts
+│   │
+│   ├── services/
+│   │   ├── email.service.ts
+│   │   └── payment.service.ts
+│   │
+│   ├── types/
+│   │   ├── api.ts
+│   │   └── common.ts
+│   │
+│   ├── constants/
+│   │   ├── routes.ts
+│   │   └── config.ts
+│   │
+│   └── providers/
+│       ├── QueryProvider.tsx
+│       └── ThemeProvider.tsx
+│
+├── public/
+│   ├── images/
+│   ├── icons/
+│   └── fonts/
+│
+├── .env.local
+├── .env.example
+├── next.config.ts
+├── tsconfig.json
+├── eslint.config.mjs
+├── package.json
+└── README.md
