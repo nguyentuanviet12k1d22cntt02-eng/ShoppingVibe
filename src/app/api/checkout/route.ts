@@ -10,6 +10,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 interface CheckoutItemPayload {
   productId: string;
   quantity: number;
+  variantId?: string;
+  variantName?: string;
+  priceAdjustment?: number;
 }
 
 interface CheckoutPayload {
@@ -19,13 +22,14 @@ interface CheckoutPayload {
   address: string;
   note?: string;
   paymentMethod: 'cod' | 'bank_transfer' | 'qr';
+  couponCode?: string;
   items: CheckoutItemPayload[];
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: CheckoutPayload = await req.json();
-    const { fullname, phone, email, address, note, paymentMethod, items } = body;
+    const { fullname, phone, email, address, note, paymentMethod, couponCode, items } = body;
 
     // 1. Validation
     if (!fullname?.trim() || !phone?.trim() || !address?.trim()) {
@@ -96,35 +100,79 @@ export async function POST(req: NextRequest) {
       }
 
       const validQuantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
-      const itemTotal = prodInfo.price * validQuantity;
+      const adj = Math.max(0, Number(item.priceAdjustment || 0));
+      const finalItemPrice = prodInfo.price + adj;
+      const itemTotal = finalItemPrice * validQuantity;
       calculatedSubtotal += itemTotal;
+
+      const finalProductName = item.variantName
+        ? `${prodInfo.name} (${item.variantName})`
+        : prodInfo.name;
 
       verifiedOrderItems.push({
         product_id: item.productId.toString(),
-        product_name: prodInfo.name,
+        product_name: finalProductName,
         image: prodInfo.image,
-        price: prodInfo.price,
+        price: finalItemPrice,
         quantity: validQuantity,
       });
     }
 
-    // 4. Calculate shipping fee and final total
-    const calculatedShippingFee = calculatedSubtotal >= 500000 || calculatedSubtotal === 0 ? 0 : 30000;
-    const calculatedTotal = calculatedSubtotal + calculatedShippingFee;
+    // 4. Calculate discount if coupon provided
+    let discountAmount = 0;
+    let appliedCouponData: any = null;
 
-    // 5. Generate secure unique order ID (Timestamp in hex + random string)
+    if (couponCode && typeof couponCode === 'string') {
+      const cleanCoupon = couponCode.trim().toUpperCase();
+      const { data: couponRecord } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', cleanCoupon)
+        .eq('is_active', true)
+        .single();
+
+      if (couponRecord) {
+        const isNotExpired = !couponRecord.end_date || new Date(couponRecord.end_date) >= new Date();
+        const hasUsageLeft = couponRecord.usage_limit === null || couponRecord.used_count < couponRecord.usage_limit;
+        const meetsMinAmount = calculatedSubtotal >= (Number(couponRecord.min_order_amount) || 0);
+
+        if (isNotExpired && hasUsageLeft && meetsMinAmount) {
+          appliedCouponData = couponRecord;
+          const discountVal = Number(couponRecord.discount_value) || 0;
+          const maxDiscount = couponRecord.max_discount_amount ? Number(couponRecord.max_discount_amount) : Infinity;
+
+          if (couponRecord.discount_type === 'percentage') {
+            discountAmount = Math.min(Math.round((calculatedSubtotal * discountVal) / 100), maxDiscount);
+          } else {
+            discountAmount = Math.min(discountVal, calculatedSubtotal);
+          }
+        }
+      }
+    }
+
+    // 5. Calculate shipping fee and final total
+    const calculatedShippingFee = calculatedSubtotal >= 500000 || calculatedSubtotal === 0 ? 0 : 30000;
+    const calculatedTotal = Math.max(0, calculatedSubtotal + calculatedShippingFee - discountAmount);
+
+    // 6. Generate secure unique order ID (Timestamp in hex + random string)
     const timestampHex = Date.now().toString(36).toUpperCase();
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
     const generatedOrderId = `MS-${timestampHex}-${randomHex}`;
 
-    // 6. Insert order record
+    let orderNotes = note?.trim() || '';
+    if (appliedCouponData) {
+      const couponTag = `[Mã giảm giá: ${appliedCouponData.code} (-${discountAmount.toLocaleString('vi-VN')}đ)]`;
+      orderNotes = orderNotes ? `${orderNotes} | ${couponTag}` : couponTag;
+    }
+
+    // 7. Insert order record
     const { error: orderError } = await supabase.from('orders').insert({
       id: generatedOrderId,
       customer_name: fullname.trim(),
       customer_phone: phone.trim(),
       customer_email: email?.trim() || null,
       address: address.trim(),
-      notes: note?.trim() || null,
+      notes: orderNotes || null,
       total_amount: calculatedTotal,
       shipping_fee: calculatedShippingFee,
       payment_method: paymentMethod === 'qr' || paymentMethod === 'bank_transfer' ? 'bank_transfer' : 'cod',
@@ -139,6 +187,14 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Không thể tạo đơn hàng trên hệ thống. Vui lòng thử lại sau.' },
         { status: 500 }
       );
+    }
+
+    // Increment coupon used count if coupon was applied
+    if (appliedCouponData) {
+      await supabase
+        .from('coupons')
+        .update({ used_count: (appliedCouponData.used_count || 0) + 1 })
+        .eq('id', appliedCouponData.id);
     }
 
     // 7. Insert order items

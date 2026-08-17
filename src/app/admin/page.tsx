@@ -11,6 +11,7 @@ import DashboardOverview from '@/features/dashboard/components/DashboardOverview
 import ProductManagement from '@/features/products/components/ProductManagement';
 import OrderManagement from '@/features/orders/components/OrderManagement';
 import CustomerManagement from '@/features/customers/components/CustomerManagement';
+import CouponManagement from '@/features/coupons/components/CouponManagement';
 import SystemSettings from '@/features/admin/components/SystemSettings';
 import { useProducts } from '@/context/ProductContext';
 import { useAuth } from '@/context/AuthContext';
@@ -228,12 +229,17 @@ export default function AdminPage() {
           <OrderManagement ordersList={ordersList} setOrdersList={setOrdersList} />
         )}
 
-        {/* TAB 4: CUSTOMERS */}
+        {/* TAB 4: COUPONS */}
+        {activeNav === 'coupons' && (
+          <CouponManagement />
+        )}
+
+        {/* TAB 5: CUSTOMERS */}
         {activeNav === 'customers' && (
           <CustomerManagement customersList={customersList} setCustomersList={setCustomersList} />
         )}
 
-        {/* TAB 5: SETTINGS */}
+        {/* TAB 6: SETTINGS */}
         {activeNav === 'settings' && (
           <SystemSettings />
         )}

@@ -11,21 +11,64 @@ export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, cartSubtotal } = useCart();
   const { showToast } = useToast();
   const [voucherCode, setVoucherCode] = useState('');
-  const [discountPercent, setDiscountPercent] = useState(0);
+  const [isApplying, setIsApplying] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+    discountType: string;
+    discountValue: number;
+    description?: string;
+  } | null>(null);
 
   const shippingFee = cartSubtotal >= 500000 || cartSubtotal === 0 ? 0 : 30000;
-  const discountAmount = Math.round((cartSubtotal * discountPercent) / 100);
+  const discountAmount = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const totalAmount = Math.max(0, cartSubtotal + shippingFee - discountAmount);
 
-  const handleApplyVoucher = () => {
-    if (voucherCode.trim().toUpperCase() === 'MINI10') {
-      setDiscountPercent(10);
-      showToast('Áp dụng mã MINI10 thành công! Bạn được giảm 10% đơn hàng.', 'success');
-    } else if (voucherCode.trim()) {
-      showToast('Mã giảm giá không hợp lệ. Vui lòng nhập "MINI10"!', 'warning');
-    } else {
+  const handleApplyVoucher = async (codeToApply?: string) => {
+    const targetCode = (codeToApply || voucherCode).trim().toUpperCase();
+    if (!targetCode) {
       showToast('Vui lòng nhập mã giảm giá!', 'info');
+      return;
     }
+
+    if (cartSubtotal === 0) {
+      showToast('Giỏ hàng đang trống!', 'warning');
+      return;
+    }
+
+    try {
+      setIsApplying(true);
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: targetCode, subtotal: cartSubtotal }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        showToast(data.error || 'Mã giảm giá không hợp lệ.', 'error');
+      } else {
+        setAppliedCoupon(data.coupon);
+        setVoucherCode(targetCode);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('minishop_applied_coupon', JSON.stringify(data.coupon));
+        }
+        showToast(`Áp dụng mã ${targetCode} thành công! Giảm ${data.coupon.discountAmount.toLocaleString('vi-VN')}đ`, 'success');
+      }
+    } catch (err) {
+      showToast('Không thể kết nối máy chủ kiểm tra mã.', 'error');
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setVoucherCode('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('minishop_applied_coupon');
+    }
+    showToast('Đã hủy áp dụng mã giảm giá.', 'info');
   };
 
   return (
@@ -70,72 +113,82 @@ export default function CartPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cart.map(item => (
-                    <tr key={item.id}>
-                      <td>
-                        <div className="cart-item-info">
-                          <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
-                            <Image
-                              src={item.image}
-                              alt={item.name}
-                              fill
-                              sizes="64px"
-                              className="cart-item-img"
+                  {cart.map((item) => {
+                    const itemKey = item.cartItemId || item.id;
+                    return (
+                      <tr key={itemKey}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
+                              <Image
+                                src={item.image}
+                                alt={item.name}
+                                fill
+                                sizes="64px"
+                                className="cart-item-img"
+                              />
+                            </div>
+                            <div>
+                              <Link href={`/products/${item.id}`} style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                                {item.name}
+                              </Link>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: 700 }}>{item.categoryName}</span>
+                                {item.selectedVariant && (
+                                  <span style={{ fontSize: '0.75rem', backgroundColor: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '1px 8px', borderRadius: '10px', fontWeight: 700 }}>
+                                    {item.selectedVariant.variantName}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td style={{ fontWeight: 600 }}>{formatCurrency(item.price)}</td>
+
+                        <td>
+                          <div className="quantity-control">
+                            <button
+                              type="button"
+                              className="qty-btn"
+                              onClick={() => updateQuantity(itemKey, item.quantity - 1)}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              className="qty-input"
+                              value={item.quantity}
+                              onChange={(e) => updateQuantity(itemKey, parseInt(e.target.value || '1', 10))}
+                              min="1"
                             />
+                            <button
+                              type="button"
+                              className="qty-btn"
+                              onClick={() => updateQuantity(itemKey, item.quantity + 1)}
+                            >
+                              +
+                            </button>
                           </div>
-                          <div>
-                            <Link href={`/products/${item.id}`} style={{ fontWeight: 700, color: 'var(--text-main)' }}>
-                              {item.name}
-                            </Link>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--primary-color)', fontWeight: 600 }}>{item.categoryName}</div>
-                          </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td style={{ fontWeight: 600 }}>{formatCurrency(item.price)}</td>
+                        <td style={{ fontWeight: 800, color: 'var(--primary-color)' }}>
+                          {formatCurrency(item.price * item.quantity)}
+                        </td>
 
-                      <td>
-                        <div className="quantity-control">
+                        <td style={{ textAlign: 'right' }}>
                           <button
                             type="button"
-                            className="qty-btn"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => removeFromCart(itemKey)}
+                            style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#fee2e2', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            title="Xóa sản phẩm"
                           >
-                            -
+                            <i className="fa-solid fa-trash-can"></i>
                           </button>
-                          <input
-                            type="number"
-                            className="qty-input"
-                            value={item.quantity}
-                            onChange={(e) => updateQuantity(item.id, parseInt(e.target.value || '1', 10))}
-                            min="1"
-                          />
-                          <button
-                            type="button"
-                            className="qty-btn"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          >
-                            +
-                          </button>
-                        </div>
-                      </td>
-
-                      <td style={{ fontWeight: 800, color: 'var(--primary-color)' }}>
-                        {formatCurrency(item.price * item.quantity)}
-                      </td>
-
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          onClick={() => removeFromCart(item.id)}
-                          style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#fee2e2', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                          title="Xóa sản phẩm"
-                        >
-                          <i className="fa-solid fa-trash-can"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -170,26 +223,103 @@ export default function CartPage() {
                 </span>
               </div>
 
-              {discountAmount > 0 && (
-                <div className="summary-row" style={{ color: 'var(--primary-color)' }}>
-                  <span>Giảm giá (MINI10)</span>
-                  <span style={{ fontWeight: 700 }}>-{formatCurrency(discountAmount)}</span>
+              {appliedCoupon ? (
+                <div
+                  style={{
+                    margin: 'var(--space-md) 0',
+                    padding: '12px 14px',
+                    backgroundColor: 'var(--primary-surface)',
+                    border: '1px dashed var(--primary-color)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--primary-color)' }}>
+                      <i className="fa-solid fa-ticket"></i>
+                      <span>{appliedCoupon.code}</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                        (-{formatCurrency(appliedCoupon.discountAmount)})
+                      </span>
+                    </div>
+                    {appliedCoupon.description && (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                        {appliedCoupon.description}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Xóa mã
+                  </button>
                 </div>
-              )}
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '8px', margin: 'var(--space-md) 0' }}>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Nhập mã giảm giá..."
+                      value={voucherCode}
+                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleApplyVoucher();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-green"
+                      onClick={() => handleApplyVoucher()}
+                      disabled={isApplying}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {isApplying ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Áp dụng'}
+                    </button>
+                  </div>
 
-              {/* Voucher Box */}
-              <div style={{ display: 'flex', gap: '8px', margin: 'var(--space-md) 0' }}>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Mã giảm giá (ví dụ: MINI10)"
-                  value={voucherCode}
-                  onChange={(e) => setVoucherCode(e.target.value)}
-                />
-                <button type="button" className="btn btn-outline-green" onClick={handleApplyVoucher}>
-                  Áp dụng
-                </button>
-              </div>
+                  {/* Suggestion Voucher Pills */}
+                  <div style={{ marginBottom: 'var(--space-md)' }}>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Mã ưu đãi gợi ý:</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {['MINI10', 'ARTISAN50', 'FREESHIP'].map((code) => (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => handleApplyVoucher(code)}
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            backgroundColor: '#f1f5f9',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '6px',
+                            color: 'var(--primary-color)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          +{code}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="summary-row summary-total">
                 <span>Tổng thanh toán</span>

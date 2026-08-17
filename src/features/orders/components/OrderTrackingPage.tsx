@@ -7,6 +7,7 @@ import { formatCurrency } from '@/data/products';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@/utils/supabase/client';
 import Parcel3DCanvas from './Parcel3DCanvas';
+import VietQRModal from '@/features/checkout/components/VietQRModal';
 import gsap from 'gsap';
 
 interface OrderItem {
@@ -49,6 +50,7 @@ export default function OrderTrackingPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(selectedIdFromQuery || null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
 
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
@@ -94,15 +96,26 @@ export default function OrderTrackingPage() {
     };
   };
 
-  // Securely load orders for current logged-in user or single queried order
+  // Securely load orders based on authentication role
   const loadOrders = async () => {
     setIsLoading(true);
     setSearchError('');
     try {
       const supabase = createClient();
 
-      if (user?.email) {
-        // Authenticated user: Query only their own orders
+      if (user?.role === 'admin') {
+        // Admin: Load all orders for store oversight
+        const { data: dbOrders, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .order('order_date', { ascending: false });
+
+        if (error) throw error;
+        if (dbOrders) {
+          setAllOrders(dbOrders.map(mapDbOrderToDetail));
+        }
+      } else if (user?.email) {
+        // Logged-in Customer: Load ONLY orders matching their email
         const { data: dbOrders, error } = await supabase
           .from('orders')
           .select('*, order_items(*)')
@@ -114,7 +127,7 @@ export default function OrderTrackingPage() {
           setAllOrders(dbOrders.map(mapDbOrderToDetail));
         }
       } else if (selectedIdFromQuery) {
-        // Guest user with direct URL query: Load only this specific order
+        // Guest with direct URL link (e.g. from checkout success): Load ONLY this specific order
         const { data: dbOrders, error } = await supabase
           .from('orders')
           .select('*, order_items(*)')
@@ -123,14 +136,15 @@ export default function OrderTrackingPage() {
 
         if (error) throw error;
         if (dbOrders && dbOrders.length > 0) {
-          setAllOrders(dbOrders.map(mapDbOrderToDetail));
-          setSelectedOrderId(dbOrders[0].id);
+          const mapped = dbOrders.map(mapDbOrderToDetail);
+          setAllOrders(mapped);
+          setSelectedOrderId(mapped[0].id);
         } else {
           setAllOrders([]);
-          setSearchError(`Không tìm thấy đơn hàng với mã #${selectedIdFromQuery}`);
+          setSearchError(`Không tìm thấy đơn hàng #${selectedIdFromQuery}`);
         }
       } else {
-        // Guest user without query: Do not fetch all store orders
+        // Guest user not logged in: DO NOT expose all store orders for privacy & security
         setAllOrders([]);
       }
     } catch (err: any) {
@@ -174,9 +188,9 @@ export default function OrderTrackingPage() {
         const mapped = data.map(mapDbOrderToDetail);
         setAllOrders(mapped);
         setSelectedOrderId(mapped[0].id);
-        router.push(`/order-tracking?id=${mapped[0].id}`);
+        setSearchError('');
       } else {
-        setSearchError('Không tìm thấy thông tin đơn hàng phù hợp. Vui lòng kiểm tra lại Mã đơn và Số điện thoại.');
+        setSearchError('Không tìm thấy đơn hàng. Vui lòng kiểm tra lại Mã đơn hàng và Số điện thoại nhận hàng.');
       }
     } catch (err: any) {
       console.error('Search order error:', err);
@@ -203,14 +217,25 @@ export default function OrderTrackingPage() {
     return allOrders.find(o => o.id.toLowerCase() === selectedOrderId.toLowerCase().trim()) || null;
   }, [selectedOrderId, allOrders]);
 
-  // Display orders for current user
+  // Filtered orders list
   const displayOrders = useMemo(() => {
     let list = allOrders;
+
     if (statusFilter !== 'all') {
       list = list.filter(o => o.shippingStatus === statusFilter);
     }
+
+    if (trackingIdInput.trim() && user) {
+      const q = trackingIdInput.trim().toLowerCase();
+      list = list.filter(o =>
+        o.id.toLowerCase().includes(q) ||
+        o.customerName.toLowerCase().includes(q) ||
+        o.customerPhone.includes(q)
+      );
+    }
+
     return list;
-  }, [allOrders, statusFilter]);
+  }, [allOrders, statusFilter, trackingIdInput, user]);
 
   // GSAP animation for Order List
   useEffect(() => {
@@ -564,12 +589,57 @@ export default function OrderTrackingPage() {
                     <div><strong>Địa chỉ:</strong> {activeOrder.address}</div>
                     <div>
                       <strong>Thanh toán:</strong>{' '}
-                      {activeOrder.paymentMethod === 'bank_transfer' ? 'Chuyển khoản Ngân hàng' : 'Thanh toán khi nhận hàng (COD)'}
+                      {activeOrder.paymentMethod === 'bank_transfer' ? 'Chuyển khoản Ngân hàng (VietQR)' : 'Thanh toán khi nhận hàng (COD)'}
                       {' - '}
                       <span style={{ color: activeOrder.paymentStatus === 'paid' ? '#16a34a' : '#d97706', fontWeight: 700 }}>
-                        {activeOrder.paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                        {activeOrder.paymentStatus === 'paid' ? '● Đã thanh toán' : '○ Chưa thanh toán'}
                       </span>
                     </div>
+
+                    {activeOrder.paymentMethod === 'bank_transfer' && activeOrder.paymentStatus === 'pending' && (
+                      <div
+                        style={{
+                          marginTop: '6px',
+                          padding: '14px',
+                          borderRadius: '14px',
+                          backgroundColor: '#ecfdf5',
+                          border: '1px solid #a7f3d0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '10px',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 800, color: '#065f46', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="fa-solid fa-qrcode"></i>
+                            <span>Đơn hàng chưa được thanh toán</span>
+                          </div>
+                          <div style={{ color: '#047857', fontSize: '0.8rem', marginTop: '2px' }}>
+                            Quét mã VietQR để hoàn tất thanh toán và chuyển đơn sang đóng gói ngay!
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsQRModalOpen(true)}
+                          className="btn btn-primary btn-sm"
+                          style={{
+                            borderRadius: '10px',
+                            fontWeight: 800,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 8px rgba(46, 125, 50, 0.25)',
+                          }}
+                        >
+                          <i className="fa-solid fa-bolt"></i>
+                          <span>Quét mã VietQR ngay</span>
+                        </button>
+                      </div>
+                    )}
+
                     {activeOrder.notes && (
                       <div style={{ backgroundColor: '#fef3c7', padding: '10px 14px', borderRadius: '10px', color: '#92400e', fontSize: '0.85rem' }}>
                         <strong>Ghi chú:</strong> {activeOrder.notes}
@@ -611,158 +681,232 @@ export default function OrderTrackingPage() {
           /* VIEW 2: ORDERS LIST & TRACKING SEARCH (CUSTOMER / GUEST) */
           /* ========================================================= */
           <div>
-            {/* Header Section */}
-            <div style={{ marginBottom: '28px' }}>
-              <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
-                {user ? 'Đơn Hàng Của Bạn' : 'Tra Cứu & Theo Dõi Đơn Hàng'}
-              </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-                {user
-                  ? `Chào ${user.name}, dưới đây là danh sách đơn hàng gắn với tài khoản (${user.email}).`
-                  : 'Nhập mã đơn hàng và số điện thoại để tra cứu trạng thái vận chuyển thời gian thực.'}
-              </p>
-            </div>
-
-            {/* Quick Order Lookup Form (Always available for guest or quick query) */}
-            <div
-              style={{
-                backgroundColor: 'var(--bg-surface)',
-                borderRadius: '24px',
-                border: '1px solid var(--border-color)',
-                padding: '28px',
-                boxShadow: 'var(--shadow-sm)',
-                marginBottom: '32px',
-              }}
-            >
-              <h2 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--primary-color)' }}></i>
-                Tra cứu nhanh theo mã đơn
-              </h2>
-
-              <form onSubmit={handleManualSearch} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr)) auto', gap: '14px', alignItems: 'center' }}>
-                <div>
-                  <label htmlFor="track-order-id" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-muted)' }}>
-                    Mã đơn hàng <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input
-                    id="track-order-id"
-                    type="text"
-                    placeholder="Ví dụ: MS-1234 hoặc MS-..."
-                    value={trackingIdInput}
-                    onChange={e => setTrackingIdInput(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-color)',
-                      fontSize: '0.95rem',
-                      outline: 'none',
-                      backgroundColor: 'var(--bg-main)',
-                    }}
-                  />
+            {user ? (
+              /* LOGGED-IN USER VIEW: Show full order history of user */
+              <div>
+                <div style={{ marginBottom: '28px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800, marginBottom: '8px' }}>
+                    <i className="fa-solid fa-circle-user"></i>
+                    {user.role === 'admin' ? 'TÀI KHOẢN QUẢN TRỊ VIÊN' : 'TÀI KHOẢN KHÁCH HÀNG'}
+                  </div>
+                  <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px' }}>
+                    Đơn Hàng Của Bạn
+                  </h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                    Chào <strong>{user.name}</strong>, dưới đây là toàn bộ lịch sử đơn hàng gắn với tài khoản của bạn ({user.email}).
+                  </p>
                 </div>
 
-                <div>
-                  <label htmlFor="track-phone" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-muted)' }}>
-                    Số điện thoại nhận hàng (tùy chọn)
-                  </label>
-                  <input
-                    id="track-phone"
-                    type="tel"
-                    placeholder="Ví dụ: 0901234567"
-                    value={trackingPhoneInput}
-                    onChange={e => setTrackingPhoneInput(e.target.value)}
+                {/* Fast Search in My Orders */}
+                {allOrders.length > 0 && (
+                  <div
                     style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      borderRadius: '12px',
+                      backgroundColor: 'var(--bg-surface)',
+                      borderRadius: '20px',
                       border: '1px solid var(--border-color)',
-                      fontSize: '0.95rem',
-                      outline: 'none',
-                      backgroundColor: 'var(--bg-main)',
-                    }}
-                  />
-                </div>
-
-                <div style={{ alignSelf: 'flex-end' }}>
-                  <button
-                    type="submit"
-                    disabled={isManualSearching}
-                    className="btn btn-primary"
-                    style={{
-                      height: '46px',
-                      padding: '0 24px',
-                      borderRadius: '12px',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      whiteSpace: 'nowrap',
+                      padding: '18px 24px',
+                      boxShadow: 'var(--shadow-sm)',
+                      marginBottom: '24px',
                     }}
                   >
-                    {isManualSearching ? (
-                      <>
-                        <div style={{ width: '16px', height: '16px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                        <span>Đang tra cứu...</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="fa-solid fa-magnifying-glass"></i>
-                        <span>Tra cứu đơn</span>
-                      </>
-                    )}
-                  </button>
+                    <div style={{ position: 'relative' }}>
+                      <i
+                        className="fa-solid fa-magnifying-glass"
+                        style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '1rem' }}
+                      ></i>
+                      <input
+                        type="text"
+                        placeholder="Tìm trong danh sách đơn hàng của bạn (theo Mã đơn, sản phẩm, SĐT)..."
+                        value={trackingIdInput}
+                        onChange={e => setTrackingIdInput(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px 40px 12px 44px',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '0.95rem',
+                          outline: 'none',
+                          backgroundColor: 'var(--bg-main)',
+                        }}
+                      />
+                      {trackingIdInput && (
+                        <button
+                          type="button"
+                          onClick={() => setTrackingIdInput('')}
+                          style={{
+                            position: 'absolute',
+                            right: '14px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            fontSize: '1rem',
+                          }}
+                        >
+                          <i className="fa-solid fa-circle-xmark"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* GUEST VIEW (NOT LOGGED IN): Secure Lookup Form */
+              <div>
+                <div style={{ marginBottom: '28px' }}>
+                  <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
+                    Tra Cứu & Theo Dõi Đơn Hàng
+                  </h1>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                    Nhập mã đơn hàng và số điện thoại nhận hàng của bạn để kiểm tra trạng thái đóng gói & giao hàng thời gian thực.
+                  </p>
                 </div>
-              </form>
 
-              {searchError && (
-                <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '10px', backgroundColor: '#fef2f2', color: '#b91c1c', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <i className="fa-solid fa-circle-exclamation"></i>
-                  <span>{searchError}</span>
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    borderRadius: '24px',
+                    border: '1px solid var(--border-color)',
+                    padding: '28px',
+                    boxShadow: 'var(--shadow-sm)',
+                    marginBottom: '32px',
+                  }}
+                >
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--primary-color)' }}></i>
+                    Tra cứu đơn hàng của bạn
+                  </h2>
+
+                  <form onSubmit={handleManualSearch} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr)) auto', gap: '14px', alignItems: 'center' }}>
+                    <div>
+                      <label htmlFor="track-order-id" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-muted)' }}>
+                        Mã đơn hàng <span style={{ color: '#ef4444' }}>*</span>
+                      </label>
+                      <input
+                        id="track-order-id"
+                        type="text"
+                        placeholder="Ví dụ: MS-1024 hoặc MS-..."
+                        value={trackingIdInput}
+                        onChange={e => setTrackingIdInput(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '0.95rem',
+                          outline: 'none',
+                          backgroundColor: 'var(--bg-main)',
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="track-phone" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-muted)' }}>
+                        Số điện thoại nhận hàng (tùy chọn)
+                      </label>
+                      <input
+                        id="track-phone"
+                        type="tel"
+                        placeholder="Ví dụ: 0901234567"
+                        value={trackingPhoneInput}
+                        onChange={e => setTrackingPhoneInput(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '0.95rem',
+                          outline: 'none',
+                          backgroundColor: 'var(--bg-main)',
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ alignSelf: 'flex-end' }}>
+                      <button
+                        type="submit"
+                        disabled={isManualSearching}
+                        className="btn btn-primary"
+                        style={{
+                          height: '46px',
+                          padding: '0 24px',
+                          borderRadius: '12px',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {isManualSearching ? (
+                          <>
+                            <div style={{ width: '16px', height: '16px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                            <span>Đang tra cứu...</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-magnifying-glass"></i>
+                            <span>Tra cứu đơn</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+
+                  {searchError && (
+                    <div style={{ marginTop: '14px', padding: '10px 16px', borderRadius: '10px', backgroundColor: '#fef2f2', color: '#b91c1c', fontSize: '0.88rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <i className="fa-solid fa-circle-exclamation"></i>
+                      <span>{searchError}</span>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '20px', paddingTop: '18px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                    <span>Bạn muốn xem tự động tất cả đơn hàng đã mua?</span>
+                    <Link href="/auth?redirect=/order-tracking" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                      <i className="fa-solid fa-arrow-right-to-bracket"></i>
+                      <span>Đăng nhập tài khoản</span>
+                    </Link>
+                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {!user && (
-                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                  <span>Bạn đã có tài khoản mua sắm tại Mini Shop?</span>
-                  <Link href="/auth?redirect=/order-tracking" style={{ color: 'var(--primary-color)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>Đăng nhập để xem tất cả đơn hàng</span>
-                    <i className="fa-solid fa-arrow-right" style={{ fontSize: '0.8rem' }}></i>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {/* Filter Pills (if user has orders) */}
-            {user && displayOrders.length > 0 && (
+            {/* Filter Pills */}
+            {allOrders.length > 0 && (
               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '24px' }}>
                 {[
-                  { key: 'all', label: 'Tất cả đơn' },
+                  { key: 'all', label: `Tất cả đơn (${allOrders.length})` },
                   { key: 'pending', label: 'Chờ xác nhận' },
                   { key: 'processing', label: 'Đang chuẩn bị' },
                   { key: 'shipping', label: 'Đang giao hàng' },
                   { key: 'completed', label: 'Đã giao thành công' },
-                ].map(f => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => setStatusFilter(f.key)}
-                    style={{
-                      padding: '8px 18px',
-                      borderRadius: '24px',
-                      fontSize: '0.88rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      border: statusFilter === f.key ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
-                      backgroundColor: statusFilter === f.key ? 'var(--primary-color)' : 'var(--bg-surface)',
-                      color: statusFilter === f.key ? '#ffffff' : 'var(--text-main)',
-                      transition: 'all 0.2s',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+                  { key: 'cancelled', label: 'Đã hủy' },
+                ].map(f => {
+                  const count = f.key === 'all' ? allOrders.length : allOrders.filter(o => o.shippingStatus === f.key).length;
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setStatusFilter(f.key)}
+                      style={{
+                        padding: '8px 18px',
+                        borderRadius: '24px',
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: statusFilter === f.key ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
+                        backgroundColor: statusFilter === f.key ? 'var(--primary-color)' : 'var(--bg-surface)',
+                        color: statusFilter === f.key ? '#ffffff' : 'var(--text-main)',
+                        transition: 'all 0.2s',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {f.label} {f.key !== 'all' && `(${count})`}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -931,6 +1075,21 @@ export default function OrderTrackingPage() {
               </div>
             ) : null}
           </div>
+        )}
+
+        {/* VietQR Modal for Order Tracking */}
+        {activeOrder && (
+          <VietQRModal
+            isOpen={isQRModalOpen}
+            onClose={() => setIsQRModalOpen(false)}
+            orderId={activeOrder.id}
+            totalAmount={activeOrder.total}
+            customerName={activeOrder.customerName}
+            redirectOnSuccess={false}
+            onPaymentSuccess={() => {
+              loadOrders();
+            }}
+          />
         )}
       </div>
     </main>

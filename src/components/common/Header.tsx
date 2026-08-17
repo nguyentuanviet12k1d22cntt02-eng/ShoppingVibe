@@ -7,6 +7,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import AddressManagerModal from '@/features/addresses/components/AddressManagerModal';
 
 export default function Header() {
   const pathname = usePathname();
@@ -17,6 +18,7 @@ export default function Header() {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -116,13 +118,28 @@ export default function Header() {
               )}
             </Link>
 
-            {/* User Auth Buttons / User Session Avatar */}
+            {/* User Auth Section */}
             {user ? (
               <div className="user-account-wrapper">
-                <span className="user-avatar-btn">
+                <button
+                  type="button"
+                  className="user-avatar-btn"
+                  onClick={() => setIsAddressModalOpen(true)}
+                  title="Xem & quản lý Sổ địa chỉ"
+                  style={{ cursor: 'pointer', border: 'none', background: 'none' }}
+                >
                   <i className="fa-solid fa-user-circle"></i>
                   <span className="user-name-label">{user.name}</span>
-                </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddressModalOpen(true)}
+                  className="btn-logout"
+                  title="Sổ địa chỉ giao hàng"
+                  style={{ color: 'var(--primary-color)' }}
+                >
+                  <i className="fa-solid fa-address-book"></i>
+                </button>
                 <button type="button" className="btn-logout" onClick={handleLogout} title="Đăng xuất">
                   <i className="fa-solid fa-right-from-bracket"></i>
                 </button>
@@ -143,6 +160,15 @@ export default function Header() {
           </div>
         </nav>
       </div>
+
+      {/* Address Book Modal */}
+      {user?.email && (
+        <AddressManagerModal
+          isOpen={isAddressModalOpen}
+          onClose={() => setIsAddressModalOpen(false)}
+          userEmail={user.email}
+        />
+      )}
     </header>
   );
 }
