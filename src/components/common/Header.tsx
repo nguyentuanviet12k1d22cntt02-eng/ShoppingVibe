@@ -3,9 +3,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCart, showToastNotification } from '@/context/CartContext';
+import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 
 export default function Header() {
   const pathname = usePathname();
@@ -13,12 +14,13 @@ export default function Header() {
   const { totalCartItems } = useCart();
   const { wishlist } = useWishlist();
   const { user, logout } = useAuth();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
   const handleLogout = async () => {
     await logout();
-    showToastNotification('Đã đăng xuất tài khoản thành công.');
+    showToast('Đã đăng xuất tài khoản thành công.', 'info');
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -52,9 +54,9 @@ export default function Header() {
           {/* Navigation Links */}
           <ul className="nav-links">
             <li><Link href="/" className={`nav-link ${pathname === '/' ? 'active' : ''}`}>Trang chủ</Link></li>
-            <li><Link href="/product-list" className={`nav-link ${pathname.startsWith('/product-list') ? 'active' : ''}`}>Sản phẩm</Link></li>
-            <li><Link href="/product-list?category=goc-goc" className="nav-link">Gốm Bát Tràng</Link></li>
-            <li><Link href="/product-list?category=may-tre" className="nav-link">Mây Tre Đan</Link></li>
+            <li><Link href="/product-list" className={`nav-link ${pathname.startsWith('/product-list') && !pathname.includes('category=') ? 'active' : ''}`}>Sản phẩm</Link></li>
+            <li><Link href="/product-list?category=gom-su" className="nav-link">Gốm Bát Tràng</Link></li>
+            <li><Link href="/product-list?category=luu-tru" className="nav-link">Mây Tre Đan</Link></li>
             <li>
               <Link
                 href="/order-tracking"

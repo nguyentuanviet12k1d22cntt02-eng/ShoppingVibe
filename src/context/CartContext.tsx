@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product } from '@/data/products';
 
+import { useToast } from '@/context/ToastContext';
+
 export interface CartItem extends Product {
   quantity: number;
 }
@@ -21,41 +23,10 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 const CART_KEY = 'minishop_cart';
 
-export function showToastNotification(message: string) {
-  if (typeof window === 'undefined') return;
-  
-  let container = document.getElementById('toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'toast-container';
-    container.className = 'toast-container';
-    document.body.appendChild(container);
-  }
-
-  // Prevent duplicate toast if identical message is already active
-  const existingToasts = container.querySelectorAll('.toast-notification');
-  for (let i = 0; i < existingToasts.length; i++) {
-    if (existingToasts[i].textContent?.includes(message)) {
-      return;
-    }
-  }
-
-  const toast = document.createElement('div');
-  toast.className = 'toast-notification';
-  toast.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #4ade80; font-size: 1.15rem;"></i> <span>${message}</span>`;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(100%)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 2500);
-}
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -85,7 +56,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { ...product, quantity }];
     });
-    showToastNotification(`Đã thêm ${quantity} x ${product.name} vào giỏ hàng!`);
+    showToast(`Đã thêm ${quantity} x ${product.name} vào giỏ hàng!`, 'success');
   };
 
   const updateCartQuantity = (productId: string, delta: number) => {
@@ -116,7 +87,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromCart = (productId: string) => {
     setCart(prev => prev.filter(item => item.id !== productId));
-    showToastNotification(`Đã xóa sản phẩm khỏi giỏ hàng.`);
+    showToast(`Đã xóa sản phẩm khỏi giỏ hàng.`, 'info');
   };
 
   const clearCart = () => {

@@ -4,11 +4,12 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useCart } from '@/context/CartContext';
-import { showToastNotification } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 import { formatCurrency } from '@/data/products';
 
 export default function CartPage() {
   const { cart, removeFromCart, updateQuantity, clearCart, cartSubtotal } = useCart();
+  const { showToast } = useToast();
   const [voucherCode, setVoucherCode] = useState('');
   const [discountPercent, setDiscountPercent] = useState(0);
 
@@ -19,11 +20,11 @@ export default function CartPage() {
   const handleApplyVoucher = () => {
     if (voucherCode.trim().toUpperCase() === 'MINI10') {
       setDiscountPercent(10);
-      showToastNotification('Áp dụng mã MINI10 thành công! Bạn được giảm 10% đơn hàng.');
+      showToast('Áp dụng mã MINI10 thành công! Bạn được giảm 10% đơn hàng.', 'success');
     } else if (voucherCode.trim()) {
-      showToastNotification('Mã giảm giá không hợp lệ. Vui lòng nhập "MINI10"!');
+      showToast('Mã giảm giá không hợp lệ. Vui lòng nhập "MINI10"!', 'warning');
     } else {
-      showToastNotification('Vui lòng nhập mã giảm giá!');
+      showToast('Vui lòng nhập mã giảm giá!', 'info');
     }
   };
 
