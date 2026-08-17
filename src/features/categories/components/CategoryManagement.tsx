@@ -98,13 +98,6 @@ export default function CategoryManagement({ productsList }: CategoryManagementP
         status: formData.status,
       };
       addCategory(newCat);
-
-      // Automatically create folder on disk for this new category
-      fetch('/api/categories/create-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: formData.slug.trim() }),
-      }).catch(err => console.error('Auto create folder error:', err));
     }
 
     setIsModalOpen(false);

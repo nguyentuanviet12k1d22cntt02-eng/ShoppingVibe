@@ -83,7 +83,7 @@ export default function CartPage() {
                             />
                           </div>
                           <div>
-                            <Link href={`/product-detail?id=${item.id}`} style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                            <Link href={`/products/${item.id}`} style={{ fontWeight: 700, color: 'var(--text-main)' }}>
                               {item.name}
                             </Link>
                             <div style={{ fontSize: '0.78rem', color: 'var(--primary-color)', fontWeight: 600 }}>{item.categoryName}</div>

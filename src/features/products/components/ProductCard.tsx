@@ -25,7 +25,7 @@ export default function ProductCard({ product }: { product: Product }) {
       data-price={product.price}
     >
       <div className="product-card-img-wrapper" style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', overflow: 'hidden' }}>
-        <Link href={`/product-detail?id=${product.id}`} style={{ display: 'block', width: '100%', height: '100%', position: 'relative' }}>
+        <Link href={`/products/${product.id}`} style={{ display: 'block', width: '100%', height: '100%', position: 'relative' }}>
           <Image
             src={product.image}
             alt={product.name}
@@ -48,7 +48,7 @@ export default function ProductCard({ product }: { product: Product }) {
         {/* Hover Quick Action Buttons */}
         <div className="product-card-overlay">
           <Link
-            href={`/product-detail?id=${product.id}`}
+            href={`/products/${product.id}`}
             className="action-icon-btn"
             title="Xem chi tiết sản phẩm"
             aria-label="Xem chi tiết"
@@ -85,7 +85,7 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="product-card-body">
         <div className="product-card-category">{product.categoryName}</div>
         <h3 className="product-card-title">
-          <Link href={`/product-detail?id=${product.id}`}>
+          <Link href={`/products/${product.id}`}>
             {product.name}
           </Link>
         </h3>

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 import path from 'path';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+const BUCKET_NAME = 'product-images';
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,28 +16,14 @@ export async function POST(req: NextRequest) {
     const category = (formData.get('category') as string) || 'noi-that';
 
     if (!file) {
-      return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Không tìm thấy file tải lên.' }, { status: 400 });
     }
 
-    // Map category slug to folder name representation
+    // Map category slug to folder prefix
     let folderName = category;
     if (category === 'noi-that') folderName = 'noi-that-gia-dung';
     else if (category === 'den' || category === 'decor' || category === 'trang-tri' || category === 'gom-su') folderName = 'do-my-nghe';
     else if (category === 'luu-tru') folderName = 'do-thu-cong';
-
-    // Target directories
-    // 1. Inside Next.js public directory
-    const nextPublicDir = path.join(process.cwd(), 'public', 'assets', 'images', 'products', folderName);
-    // 2. In root workspace assets directory
-    const rootWorkspaceDir = path.join(process.cwd(), '..', 'assets', 'images', 'products', folderName);
-
-    // Create directories if they do not exist
-    if (!fs.existsSync(nextPublicDir)) {
-      fs.mkdirSync(nextPublicDir, { recursive: true });
-    }
-    if (!fs.existsSync(rootWorkspaceDir)) {
-      fs.mkdirSync(rootWorkspaceDir, { recursive: true });
-    }
 
     // Sanitize file name
     const originalName = file.name;
@@ -43,29 +36,49 @@ export async function POST(req: NextRequest) {
       .replace(/[^a-z0-9_-]/g, '-')
       .replace(/-+/g, '-');
 
-    const finalFileName = `${baseName}${ext}`;
+    const timestamp = Date.now();
+    const finalFileName = `${timestamp}-${baseName}${ext}`;
+    const storagePath = `${folderName}/${finalFileName}`;
 
     // Read file buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Write to both locations
-    const nextPublicFilePath = path.join(nextPublicDir, finalFileName);
-    const rootWorkspaceFilePath = path.join(rootWorkspaceDir, finalFileName);
+    // Upload to Supabase Storage Bucket
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(storagePath, buffer, {
+        contentType: file.type || 'image/webp',
+        upsert: true,
+      });
 
-    fs.writeFileSync(nextPublicFilePath, buffer);
-    fs.writeFileSync(rootWorkspaceFilePath, buffer);
+    if (uploadError) {
+      console.error('Supabase Storage upload error:', uploadError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Lỗi tải ảnh lên Supabase Storage: ${uploadError.message}. Vui lòng kiểm tra quyền (Policy) của bucket '${BUCKET_NAME}'.`,
+        },
+        { status: 500 }
+      );
+    }
 
-    const publicUrl = `/assets/images/products/${folderName}/${finalFileName}`;
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(storagePath);
+
+    const publicUrl = publicUrlData.publicUrl;
 
     return NextResponse.json({
       success: true,
       url: publicUrl,
       fileName: finalFileName,
       folder: folderName,
+      storagePath,
     });
   } catch (error: any) {
-    console.error('Upload error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('Upload route error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Lỗi tải ảnh.' }, { status: 500 });
   }
 }

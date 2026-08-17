@@ -10,37 +10,41 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import ProductCard from './ProductCard';
 
-export default function ProductDetail() {
+interface ProductDetailProps {
+  productId?: string;
+}
+
+export default function ProductDetail({ productId }: ProductDetailProps) {
   const searchParams = useSearchParams();
-  const id = searchParams.get('id') || 'p4';
-  const { products } = useProducts();
+  const id = productId || searchParams.get('id') || 'p1';
+  const { products, isLoading: isProductsLoading } = useProducts();
 
   const product = useMemo(() => {
-    return products.find(p => p.id === id) || products[0] || PRODUCTS[0];
+    return products.find(p => p.id === id) || PRODUCTS.find(p => p.id === id) || null;
   }, [products, id]);
 
   const { addToCart } = useCart();
   const { toggleWishlist, isWishlisted } = useWishlist();
-  const wishlisted = isWishlisted(product.id);
+  const wishlisted = product ? isWishlisted(product.id) : false;
 
   const otherProducts = useMemo(() => {
+    if (!product) return [];
     return products.filter(p => p.id !== product.id);
-  }, [products, product.id]);
+  }, [products, product]);
 
   const thumbnails = useMemo(() => {
-    return [
-      product.image,
-      otherProducts[0] ? otherProducts[0].image : product.image,
-      otherProducts[1] ? otherProducts[1].image : product.image,
-    ];
-  }, [product, otherProducts]);
+    if (!product) return [];
+    return [product.image];
+  }, [product]);
 
-  const [activeThumb, setActiveThumb] = useState<string>(product.image);
+  const [activeThumb, setActiveThumb] = useState<string>(product?.image || '');
   const [quantity, setQuantity] = useState<number>(1);
 
   useEffect(() => {
-    setActiveThumb(product.image);
-    setQuantity(1);
+    if (product) {
+      setActiveThumb(product.image);
+      setQuantity(1);
+    }
   }, [product]);
 
   const handleQuantityMinus = () => {
@@ -52,10 +56,28 @@ export default function ProductDetail() {
   };
 
   const relatedProducts = useMemo(() => {
+    if (!product) return [];
     const sameCat = products.filter(p => p.id !== product.id && p.category === product.category);
     if (sameCat.length >= 4) return sameCat.slice(0, 4);
     return products.filter(p => p.id !== product.id).slice(0, 4);
   }, [products, product]);
+
+  if (!product) {
+    return (
+      <main className="main-content" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="container" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <div style={{ fontSize: '3.5rem', marginBottom: '16px' }}>🏺</div>
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '10px' }}>Không tìm thấy sản phẩm</h2>
+          <p style={{ color: 'var(--text-muted)', maxWidth: '420px', margin: '0 auto 24px auto' }}>
+            Sản phẩm bạn đang tìm kiếm không tồn tại hoặc đã ngừng kinh doanh.
+          </p>
+          <Link href="/product-list" className="btn btn-primary">
+            Quay lại danh mục sản phẩm
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="main-content">

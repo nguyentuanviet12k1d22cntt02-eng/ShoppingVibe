@@ -51,7 +51,7 @@ export default function AuthContainer() {
       } else {
         showToastNotification(`Đăng nhập thành công! Chào mừng bạn.`);
         setTimeout(() => {
-          if (res.role === 'admin' || loginEmail.trim().toLowerCase() === 'nguyentuanviet12k1@gmail.com') {
+          if (res.role === 'admin') {
             router.push('/admin');
           } else {
             router.push(redirectUrl && redirectUrl !== '/admin' ? redirectUrl : '/');

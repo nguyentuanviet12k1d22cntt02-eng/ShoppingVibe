@@ -1,7 +1,13 @@
 import pg from 'pg';
 const { Client } = pg;
 
-const connectionString = 'postgresql://postgres:Viet.10092004%40@db.unilqwsbbcnpbybizcbz.supabase.co:5432/postgres';
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+if (!connectionString) {
+  console.error('❌ Lỗi: Chưa cấu hình biến môi trường DATABASE_URL hoặc POSTGRES_URL.');
+  console.error('👉 Vui lòng thiết lập biến môi trường trước khi chạy script: e.g. DATABASE_URL="postgresql://..." node scripts/init_supabase_schema.mjs');
+  process.exit(1);
+}
 
 const client = new Client({
   connectionString,

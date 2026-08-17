@@ -44,9 +44,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sbUser.email?.split('@')[0] ||
       'Khách hàng';
 
-    let role: 'admin' | 'customer' =
-      sbUser.email === 'nguyentuanviet12k1@gmail.com' ? 'admin' :
-      (sbUser.app_metadata?.role || sbUser.user_metadata?.role || 'customer');
+    const configuredAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase();
+    const isConfiguredAdmin = configuredAdminEmail && sbUser.email?.toLowerCase() === configuredAdminEmail;
+
+    let role: 'admin' | 'customer' = isConfiguredAdmin
+      ? 'admin'
+      : (sbUser.app_metadata?.role || sbUser.user_metadata?.role || 'customer');
 
     // Fetch from profiles table for definitive role
     try {
@@ -57,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (profile?.role) {
-        role = profile.role as 'admin' | 'customer';
+        role = profile.role === 'admin' ? 'admin' : 'customer';
       }
     } catch (e) {
       console.error('Error fetching user profile role:', e);
@@ -108,6 +111,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (name: string, email: string, password: string): Promise<AuthResult> => {
       try {
         setIsLoading(true);
+        const configuredAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase();
+        const initialRole = (configuredAdminEmail && email.trim().toLowerCase() === configuredAdminEmail) ? 'admin' : 'customer';
+
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -115,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             data: {
               full_name: name.trim(),
               name: name.trim(),
-              role: email.trim().toLowerCase() === 'nguyentuanviet12k1@gmail.com' ? 'admin' : 'customer',
+              role: initialRole,
             },
           },
         });
@@ -205,11 +211,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Fallback login alias
   const login = useCallback((name: string, email: string) => {
+    const configuredAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.trim().toLowerCase();
+    const role = (configuredAdminEmail && email.toLowerCase() === configuredAdminEmail) ? 'admin' : 'customer';
     setUser({
       id: 'user-' + Date.now(),
       name: name || 'Khách hàng',
       email: email || '',
-      role: email === 'nguyentuanviet12k1@gmail.com' ? 'admin' : 'customer',
+      role,
     });
   }, []);
 

@@ -35,55 +35,40 @@ export default function CheckoutPage() {
     setIsSubmitting(true);
     setErrorMessage('');
 
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const generatedOrderId = `MS-${randomSuffix}`;
-
     try {
-      const supabase = createClient();
+      const payload = {
+        fullname: fullname.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        address: address.trim(),
+        note: note.trim() || undefined,
+        paymentMethod: paymentMethod === 'qr' ? 'qr' : 'cod',
+        items: cart.map(item => ({
+          productId: item.id.toString(),
+          quantity: item.quantity,
+        })),
+      };
 
-      // 1. Insert order to public.orders
-      const { error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          id: generatedOrderId,
-          customer_name: fullname.trim(),
-          customer_phone: phone.trim(),
-          customer_email: email.trim() || null,
-          address: address.trim(),
-          notes: note.trim() || null,
-          total_amount: totalAmount,
-          shipping_fee: shippingFee,
-          payment_method: paymentMethod === 'qr' ? 'bank_transfer' : 'cod',
-          payment_status: 'pending',
-          shipping_status: 'pending',
-          order_date: new Date().toISOString(),
-        });
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      if (orderError) throw orderError;
+      const data = await res.json();
 
-      // 2. Insert order items to public.order_items
-      const itemsToInsert = cart.map(item => ({
-        order_id: generatedOrderId,
-        product_id: item.id.toString(),
-        product_name: item.name,
-        image: item.image,
-        price: item.price,
-        quantity: item.quantity,
-      }));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.');
+      }
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-
-      setOrderCode(generatedOrderId);
+      setOrderCode(data.orderId);
       setIsSuccessModalOpen(true);
       clearCart();
     } catch (err: any) {
-      console.error('Error creating order in Supabase:', err);
-      setErrorMessage(err.message || 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.');
-      alert('Có lỗi xảy ra khi đặt hàng: ' + (err.message || 'Vui lòng kiểm tra lại kết nối.'));
+      console.error('Error creating order:', err);
+      const errMsg = err.message || 'Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.';
+      setErrorMessage(errMsg);
+      alert('Có lỗi xảy ra khi đặt hàng: ' + errMsg);
     } finally {
       setIsSubmitting(false);
     }
