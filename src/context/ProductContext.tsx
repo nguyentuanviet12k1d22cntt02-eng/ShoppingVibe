@@ -5,6 +5,8 @@ import { Product } from '@/data/products';
 import { CategoryItem } from '@/features/categories/types/categories.types';
 import { createClient } from '@/utils/supabase/client';
 
+import { useToast } from '@/context/ToastContext';
+
 interface ProductContextType {
   products: Product[];
   categories: CategoryItem[];
@@ -60,6 +62,7 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMounted, setIsMounted] = useState<boolean>(false);
+  const { showToast } = useToast();
 
   const supabase = createClient();
 
@@ -129,9 +132,10 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
   }, [refreshData]);
 
   const addProduct = async (newProd: Product) => {
+    const prevProducts = products;
     setProducts(prev => [newProd, ...prev]);
     try {
-      await supabase.from('products').insert({
+      const { error } = await supabase.from('products').insert({
         id: newProd.id,
         name: newProd.name,
         price: newProd.price,
@@ -145,12 +149,18 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
         sold_count: newProd.soldCount ?? 0,
         sku: newProd.sku || '',
       });
-    } catch (e) {
+
+      if (error) throw error;
+      showToast(`Đã thêm sản phẩm "${newProd.name}" thành công!`, 'success');
+    } catch (e: any) {
       console.error('Error adding product to Supabase:', e);
+      setProducts(prevProducts);
+      showToast(`Không thể thêm sản phẩm: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 
   const updateProduct = async (id: string | number, updated: Partial<Product>) => {
+    const prevProducts = products;
     setProducts(prev =>
       prev.map(p => (p.id.toString() === id.toString() ? { ...p, ...updated } : p))
     );
@@ -168,25 +178,35 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
       if (updated.soldCount !== undefined) payload.sold_count = updated.soldCount;
       if (updated.sku !== undefined) payload.sku = updated.sku;
 
-      await supabase.from('products').update(payload).eq('id', id.toString());
-    } catch (e) {
+      const { error } = await supabase.from('products').update(payload).eq('id', id.toString());
+      if (error) throw error;
+      showToast('Cập nhật sản phẩm thành công!', 'success');
+    } catch (e: any) {
       console.error('Error updating product in Supabase:', e);
+      setProducts(prevProducts);
+      showToast(`Không thể cập nhật sản phẩm: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 
   const deleteProduct = async (id: string | number) => {
+    const prevProducts = products;
     setProducts(prev => prev.filter(p => p.id.toString() !== id.toString()));
     try {
-      await supabase.from('products').delete().eq('id', id.toString());
-    } catch (e) {
+      const { error } = await supabase.from('products').delete().eq('id', id.toString());
+      if (error) throw error;
+      showToast('Đã xóa sản phẩm thành công!', 'info');
+    } catch (e: any) {
       console.error('Error deleting product from Supabase:', e);
+      setProducts(prevProducts);
+      showToast(`Không thể xóa sản phẩm: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 
   const addCategory = async (newCat: CategoryItem) => {
+    const prevCats = categories;
     setCategories(prev => [newCat, ...prev]);
     try {
-      await supabase.from('categories').insert({
+      const { error } = await supabase.from('categories').insert({
         id: newCat.id,
         name: newCat.name,
         slug: newCat.slug,
@@ -194,12 +214,17 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
         description: newCat.description,
         status: newCat.status,
       });
-    } catch (e) {
+      if (error) throw error;
+      showToast(`Đã thêm danh mục "${newCat.name}" thành công!`, 'success');
+    } catch (e: any) {
       console.error('Error adding category to Supabase:', e);
+      setCategories(prevCats);
+      showToast(`Không thể thêm danh mục: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 
   const updateCategory = async (id: string, updated: Partial<CategoryItem>) => {
+    const prevCats = categories;
     setCategories(prev =>
       prev.map(c => (c.id === id ? { ...c, ...updated } : c))
     );
@@ -211,18 +236,27 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
       if (updated.description !== undefined) payload.description = updated.description;
       if (updated.status !== undefined) payload.status = updated.status;
 
-      await supabase.from('categories').update(payload).eq('id', id);
-    } catch (e) {
+      const { error } = await supabase.from('categories').update(payload).eq('id', id);
+      if (error) throw error;
+      showToast('Cập nhật danh mục thành công!', 'success');
+    } catch (e: any) {
       console.error('Error updating category in Supabase:', e);
+      setCategories(prevCats);
+      showToast(`Không thể cập nhật danh mục: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 
   const deleteCategory = async (id: string) => {
+    const prevCats = categories;
     setCategories(prev => prev.filter(c => c.id !== id));
     try {
-      await supabase.from('categories').delete().eq('id', id);
-    } catch (e) {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
+      showToast('Đã xóa danh mục thành công!', 'info');
+    } catch (e: any) {
       console.error('Error deleting category from Supabase:', e);
+      setCategories(prevCats);
+      showToast(`Không thể xóa danh mục: ${e.message || 'Lỗi mạng'}`, 'error');
     }
   };
 

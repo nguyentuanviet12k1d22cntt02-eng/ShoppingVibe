@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product } from '@/data/products';
-import { showToastNotification } from './CartContext';
+import { useToast } from '@/context/ToastContext';
 
 interface WishlistContextType {
   wishlist: Product[];
@@ -17,6 +17,7 @@ const WISHLIST_KEY = 'minishop_wishlist';
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlist, setWishlist] = useState<Product[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const { showToast } = useToast();
 
   useEffect(() => {
     setIsMounted(true);
@@ -44,16 +45,16 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     const isCurrentlyWishlisted = wishlist.some(item => item.id === product.id);
     if (isCurrentlyWishlisted) {
       setWishlist(prev => prev.filter(item => item.id !== product.id));
-      showToastNotification(`Đã bỏ ${product.name} khỏi danh sách yêu thích.`);
+      showToast(`Đã bỏ ${product.name} khỏi danh sách yêu thích.`, 'info');
     } else {
       setWishlist(prev => [...prev, product]);
-      showToastNotification(`Đã thêm ${product.name} vào danh sách yêu thích! ❤️`);
+      showToast(`Đã thêm ${product.name} vào danh sách yêu thích! ❤️`, 'success');
     }
   };
 
   const removeFromWishlist = (productId: string) => {
     setWishlist(prev => prev.filter(item => item.id !== productId));
-    showToastNotification(`Đã xóa khỏi danh sách yêu thích.`);
+    showToast(`Đã xóa khỏi danh sách yêu thích.`, 'info');
   };
 
   return (

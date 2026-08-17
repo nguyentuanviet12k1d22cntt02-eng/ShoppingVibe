@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { showToastNotification } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 
 export default function AuthContainer() {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function AuthContainer() {
   const errorParam = searchParams.get('error') || '';
 
   const { signIn, signUp, user } = useAuth();
+  const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
@@ -49,7 +50,7 @@ export default function AuthContainer() {
       if (!res.success) {
         setErrorMessage(res.error || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
       } else {
-        showToastNotification(`Đăng nhập thành công! Chào mừng bạn.`);
+        showToast(`Đăng nhập thành công! Chào mừng bạn.`, 'success');
         setTimeout(() => {
           if (res.role === 'admin') {
             router.push('/admin');
@@ -81,7 +82,7 @@ export default function AuthContainer() {
       if (!res.success) {
         setErrorMessage(res.error || 'Đăng ký thất bại. Vui lòng thử lại.');
       } else {
-        showToastNotification(`Đăng ký thành công! Chào mừng ${regName} đến với Mini Shop.`);
+        showToast(`Đăng ký thành công! Chào mừng ${regName} đến với Mini Shop.`, 'success');
         setTimeout(() => {
           router.push('/');
         }, 500);

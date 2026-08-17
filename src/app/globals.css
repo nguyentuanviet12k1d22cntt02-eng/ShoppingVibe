@@ -3,13 +3,12 @@
    Target Project: mini-shop-next (Next.js 16 App Router)
    ========================================================================== */
 
-/* Import FontAwesome Icons & Google Font 'Plus Jakarta Sans' */
+/* Import FontAwesome Icons */
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css');
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Unified Typography Font Stack (Enforced Rule 1) */
-  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Unified Typography Font Stack (Next/Font Optimized) */
+  --font-family: var(--font-plus-jakarta), 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Artisan Organic Color Palette */
   --primary-color: #2e7d32;      /* Craft Emerald Green (AGENTS.md rule) */
