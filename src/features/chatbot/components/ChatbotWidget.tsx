@@ -168,8 +168,8 @@ export default function ChatbotWidget() {
     }
   };
 
-  // If user is Admin or currently browsing admin pages, do NOT render the customer chatbot widget
-  if (pathname?.startsWith('/admin') || user?.role === 'admin') {
+  // Hide chatbot if user is not logged in, or is Admin, or is browsing admin pages
+  if (!user || pathname?.startsWith('/admin') || user?.role === 'admin') {
     return null;
   }
 
