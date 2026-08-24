@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/common/Header";
 import Footer from "@/components/common/Footer";
+import ChatbotWidget from "@/features/chatbot/components/ChatbotWidget";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin", "vietnamese"],
@@ -33,6 +34,7 @@ export default function RootLayout({
               {children}
             </main>
             <Footer />
+            <ChatbotWidget />
           </div>
         </Providers>
       </body>

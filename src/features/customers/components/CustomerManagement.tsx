@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Customer } from '@/features/customers/types/customers.types';
 import { formatCurrency } from '@/data/products';
+import { useToast } from '@/context/ToastContext';
 
 interface CustomerManagementProps {
   customersList: Customer[];
@@ -11,12 +12,41 @@ interface CustomerManagementProps {
 
 export default function CustomerManagement({
   customersList,
+  setCustomersList,
 }: CustomerManagementProps) {
+  const { showToast } = useToast();
   const [customerSearch, setCustomerSearch] = useState<string>('');
   const [customerLevelFilter, setCustomerLevelFilter] = useState<string>('all');
   const [customerStatusFilter, setCustomerStatusFilter] = useState<string>('all');
   const [currentCustomerPage, setCurrentCustomerPage] = useState<number>(1);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const customersPerPage = 6;
+
+  const handleToggleStatus = async (cust: Customer) => {
+    const nextStatus = cust.status === 'active' ? 'inactive' : 'active';
+    const actionText = nextStatus === 'active' ? 'mở khóa' : 'tạm khóa';
+    if (!confirm(`Bạn có chắc muốn ${actionText} tài khoản khách hàng "${cust.name}"?`)) return;
+
+    setUpdatingId(cust.id);
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: cust.id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCustomersList(prev => prev.map(c => c.id === cust.id ? { ...c, status: nextStatus } : c));
+        showToast(`Đã ${actionText} tài khoản khách hàng thành công!`, 'success');
+      } else {
+        showToast(data.error || 'Lỗi cập nhật trạng thái', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi kết nối máy chủ', 'error');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const getCustomerLevelLabel = (level: Customer['level']) => {
     switch (level) {
@@ -439,9 +469,40 @@ export default function CustomerManagement({
                       {cust.joinDate}
                     </td>
                     <td>
-                      <span className={`status-pill ${cust.status === 'active' ? 'instock' : 'outstock'}`}>
-                        {cust.status === 'active' ? 'Hoạt động' : 'Tạm khóa'}
-                      </span>
+                      <button
+                        type="button"
+                        disabled={updatingId === cust.id}
+                        onClick={() => handleToggleStatus(cust)}
+                        title={cust.status === 'active' ? 'Nhấn để tạm khóa tài khoản' : 'Nhấn để mở khóa tài khoản'}
+                        style={{
+                          border: 'none',
+                          padding: '6px 12px',
+                          borderRadius: '99px',
+                          fontWeight: 700,
+                          fontSize: '0.78rem',
+                          cursor: updatingId === cust.id ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          backgroundColor: cust.status === 'active' ? '#dcfce7' : '#fee2e2',
+                          color: cust.status === 'active' ? '#16a34a' : '#ef4444',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {updatingId === cust.id ? (
+                          <i className="fa-solid fa-spinner fa-spin"></i>
+                        ) : cust.status === 'active' ? (
+                          <>
+                            <span style={{ fontSize: '0.6rem' }}>●</span>
+                            <span>Hoạt động</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-lock" style={{ fontSize: '0.7rem' }}></i>
+                            <span>Tạm khóa</span>
+                          </>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))

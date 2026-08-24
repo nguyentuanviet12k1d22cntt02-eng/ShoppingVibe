@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { useProducts } from '@/context/ProductContext';
 
 interface ProductFormData {
   name: string;
@@ -28,6 +29,7 @@ export default function ProductFormModal({
   onClose,
   onSubmit,
 }: ProductFormModalProps) {
+  const { categories } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
   const [selectedFileName, setSelectedFileName] = useState<string>('');
@@ -137,11 +139,24 @@ export default function ProductFormModal({
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   required
                 >
-                  <option value="noi-that">Nội thất gia dụng</option>
-                  <option value="den">Đèn & Chiếu sáng</option>
-                  <option value="decor">Đồ trang trí Decor</option>
-                  <option value="luu-tru">Giỏ & Kệ lưu trữ</option>
-                  <option value="gom-su">Gốm sứ thủ công</option>
+                  {categories && categories.length > 0 ? (
+                    categories
+                      .filter(c => c.status !== 'hidden')
+                      .map(cat => (
+                        <option key={cat.id || cat.slug} value={cat.slug}>
+                          {cat.name}
+                        </option>
+                      ))
+                  ) : (
+                    <>
+                      <option value="noi-that">Nội thất gia dụng</option>
+                      <option value="den">Đèn & Chiếu sáng</option>
+                      <option value="trang-tri">Đồ trang trí Decor</option>
+                      <option value="luu-tru">Giỏ & Kệ lưu trữ</option>
+                      <option value="gom-su">Gốm sứ thủ công</option>
+                      <option value="nha-bep">Đồ dùng Nhà bếp</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -274,56 +289,6 @@ export default function ProductFormModal({
                   </span>
                 </div>
               )}
-
-              {/* Quick Asset Selector from assets/images/ */}
-              <div style={{ marginTop: '12px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
-                  <i className="fa-solid fa-images"></i> Hoặc chọn nhanh ảnh có sẵn trong thư mục assets:
-                </span>
-                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px' }}>
-                  {[
-                    { label: 'Sofa Bắc Âu', url: '/assets/images/products/noi-that-gia-dung/sofa-phong-khach.webp' },
-                    { label: 'Bàn ăn Gỗ', url: '/assets/images/products/noi-that-gia-dung/bo-ban-an-go.webp' },
-                    { label: 'Kệ Gỗ', url: '/assets/images/products/noi-that-gia-dung/ke-go-trang-tri.webp' },
-                    { label: 'Đèn Tre', url: '/assets/images/products/do-my-nghe/den-tre-thu-cong.webp' },
-                    { label: 'Đèn Lồng', url: '/assets/images/products/do-my-nghe/den-long-tre.webp' },
-                    { label: 'Bình Gốm Decor', url: '/assets/images/products/do-my-nghe/binh-gom-trang-tri.webp' },
-                    { label: 'Bộ Bình Gốm', url: '/assets/images/products/do-my-nghe/bo-binh-gom-minimal.webp' },
-                    { label: 'Giỏ Mây Đan', url: '/assets/images/products/do-thu-cong/gio-may-dan.webp' },
-                    { label: 'Tranh Macrame', url: '/assets/images/products/do-thu-cong/tranh-treo-macrame.webp' },
-                    { label: 'Khay Gỗ', url: '/assets/images/products/do-thu-cong/khay-go-hoa-van.webp' },
-                  ].map((asset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, image: asset.url }))}
-                      style={{
-                        flexShrink: 0,
-                        border: formData.image === asset.url ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
-                        borderRadius: '8px',
-                        padding: '4px',
-                        backgroundColor: 'var(--bg-surface)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '4px',
-                        width: '72px'
-                      }}
-                      title={asset.label}
-                    >
-                      <img
-                        src={asset.url}
-                        alt={asset.label}
-                        style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px' }}
-                      />
-                      <span style={{ fontSize: '0.68rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'center' }}>
-                        {asset.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Row 4: Stock Count & Status */}
@@ -334,9 +299,18 @@ export default function ProductFormModal({
                   type="number"
                   id="prod-stock-count"
                   className="form-input"
-                  placeholder="15"
+                  placeholder="0"
+                  min="0"
                   value={formData.stockCount}
-                  onChange={(e) => setFormData({ ...formData, stockCount: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const num = parseInt(val, 10);
+                    setFormData({
+                      ...formData,
+                      stockCount: val,
+                      inStock: !isNaN(num) && num > 0,
+                    });
+                  }}
                 />
               </div>
 
@@ -345,8 +319,15 @@ export default function ProductFormModal({
                 <select
                   id="prod-stock"
                   className="form-input"
-                  value={formData.inStock ? 'true' : 'false'}
-                  onChange={(e) => setFormData({ ...formData, inStock: e.target.value === 'true' })}
+                  value={formData.inStock && parseInt(formData.stockCount || '0', 10) > 0 ? 'true' : 'false'}
+                  onChange={(e) => {
+                    const isTrue = e.target.value === 'true';
+                    setFormData({
+                      ...formData,
+                      inStock: isTrue,
+                      stockCount: isTrue ? (parseInt(formData.stockCount, 10) > 0 ? formData.stockCount : '10') : '0',
+                    });
+                  }}
                 >
                   <option value="true">Còn hàng (In Stock)</option>
                   <option value="false">Hết hàng (Out of Stock)</option>

@@ -16,9 +16,11 @@ export default function ProductCard({ product }: { product: Product }) {
   const discountPercent = product.featured ? 15 : 0;
   const originalPrice = discountPercent > 0 ? Math.round(product.price / (1 - discountPercent / 100)) : null;
 
+  const isOutOfStock = product.inStock === false || (product.stockCount !== undefined && product.stockCount <= 0);
+
   return (
     <article
-      className="product-card"
+      className={`product-card ${isOutOfStock ? 'card-out-of-stock' : ''}`}
       data-id={product.id}
       data-category={product.category}
       data-name={product.name}
@@ -32,17 +34,23 @@ export default function ProductCard({ product }: { product: Product }) {
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             className="product-card-img"
-            style={{ objectFit: 'cover' }}
+            style={{ objectFit: 'cover', filter: isOutOfStock ? 'grayscale(40%)' : 'none' }}
             priority={false}
           />
         </Link>
 
         {/* Badges Overlay */}
         <div className="card-badge-container">
-          {discountPercent > 0 && (
-            <span className="card-tag card-tag-discount">-{discountPercent}%</span>
+          {isOutOfStock ? (
+            <span className="card-tag" style={{ backgroundColor: '#ef4444', color: '#ffffff' }}>Hết hàng</span>
+          ) : (
+            <>
+              {discountPercent > 0 && (
+                <span className="card-tag card-tag-discount">-{discountPercent}%</span>
+              )}
+              <span className="card-tag card-tag-craft">Thủ công</span>
+            </>
           )}
-          <span className="card-tag card-tag-craft">Thủ công</span>
         </div>
 
         {/* Hover Quick Action Buttons */}
@@ -58,11 +66,12 @@ export default function ProductCard({ product }: { product: Product }) {
           <button
             type="button"
             className="action-icon-btn"
-            title="Thêm vào giỏ hàng"
+            title={isOutOfStock ? "Sản phẩm đã hết hàng" : "Thêm vào giỏ hàng"}
             aria-label="Thêm vào giỏ"
+            disabled={isOutOfStock}
             onClick={(e) => {
               e.preventDefault();
-              addToCart(product, 1);
+              if (!isOutOfStock) addToCart(product, 1);
             }}
           >
             <i className="fa-solid fa-cart-shopping"></i>
@@ -109,10 +118,14 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
           <button
             type="button"
-            className="btn btn-outline-green btn-sm"
-            onClick={() => addToCart(product, 1)}
+            className={`btn ${isOutOfStock ? 'btn-outline' : 'btn-outline-green'} btn-sm`}
+            disabled={isOutOfStock}
+            style={{ opacity: isOutOfStock ? 0.6 : 1 }}
+            onClick={() => {
+              if (!isOutOfStock) addToCart(product, 1);
+            }}
           >
-            + Giỏ hàng
+            {isOutOfStock ? 'Hết hàng' : '+ Giỏ hàng'}
           </button>
         </div>
       </div>

@@ -12,19 +12,27 @@ export default function AuthContainer() {
   const redirectUrl = searchParams.get('redirect') || '';
   const errorParam = searchParams.get('error') || '';
 
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, user } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
+  // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPass, setShowLoginPass] = useState(false);
 
+  // Register form state
+  const [regStep, setRegStep] = useState<'form' | 'otp'>('form');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPass, setShowRegPass] = useState(false);
+  const [showRegConfirmPass, setShowRegConfirmPass] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [resendTimer, setResendTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -39,6 +47,19 @@ export default function AuthContainer() {
       }
     }
   }, [user, redirectUrl, router]);
+
+  // Resend OTP countdown timer
+  useEffect(() => {
+    let interval: any = null;
+    if (regStep === 'otp' && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (resendTimer === 0) {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [regStep, resendTimer]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +87,8 @@ export default function AuthContainer() {
     }
   };
 
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  // Step 1: Submit Registration Form -> Backend creates 6-digit OTP and sends to email
+  const handleRegisterFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -75,17 +97,111 @@ export default function AuthContainer() {
       return;
     }
 
+    if (regPassword !== regConfirmPassword) {
+      setErrorMessage('Mật khẩu xác nhận không trùng khớp. Vui lòng nhập lại!');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const res = await signUp(regName, regEmail, regPassword);
-      if (!res.success) {
-        setErrorMessage(res.error || 'Đăng ký thất bại. Vui lòng thử lại.');
+      const res = await fetch('/api/auth/register-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regName.trim(),
+          email: regEmail.trim(),
+          password: regPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        setErrorMessage(data.error || 'Đăng ký thất bại. Vui lòng thử lại.');
       } else {
-        showToast(`Đăng ký thành công! Chào mừng ${regName} đến với Mini Shop.`, 'success');
-        setTimeout(() => {
-          router.push('/');
-        }, 500);
+        setRegStep('otp');
+        setResendTimer(60);
+        setCanResend(false);
+        setOtpCode('');
+        showToast(`Mã OTP 6 số đã được gửi tới email ${regEmail.trim()}!`, 'info');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Lỗi kết nối máy chủ.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Step 2: Verify 6-digit OTP -> Backend validates and activates account
+  const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    if (otpCode.trim().length !== 6) {
+      setErrorMessage('Vui lòng nhập đầy đủ mã OTP 6 chữ số.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: regEmail.trim(),
+          otp: otpCode.trim(),
+          password: regPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        setErrorMessage(data.error || 'Mã OTP không chính xác hoặc đã hết hạn.');
+      } else {
+        showToast('Xác minh tài khoản thành công! Đang đăng nhập...', 'success');
+
+        // Automatically log in the user with verified credentials
+        const loginRes = await signIn(regEmail.trim(), regPassword);
+        if (loginRes.success) {
+          setTimeout(() => {
+            router.push('/');
+          }, 500);
+        } else {
+          setActiveTab('login');
+          setLoginEmail(regEmail.trim());
+          setRegStep('form');
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Lỗi xác minh mã OTP.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Resend 6-digit OTP
+  const handleResendOtp = async () => {
+    if (!canResend || isSubmitting) return;
+    setErrorMessage('');
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch('/api/auth/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: regEmail.trim() }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setResendTimer(60);
+        setCanResend(false);
+        showToast('Đã gửi lại mã OTP mới tới email của bạn.', 'success');
+      } else {
+        setErrorMessage(data.error || 'Không thể gửi lại mã OTP.');
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Lỗi kết nối máy chủ.');
@@ -121,8 +237,13 @@ export default function AuthContainer() {
             </div>
 
             <div style={{ padding: '20px', backgroundColor: 'rgba(255, 255, 255, 0.12)', backdropFilter: 'blur(8px)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.2)' }}>
-              <div style={{ fontWeight: 700, marginBottom: '4px' }}>⭐ Ưu đãi thành viên mới:</div>
-              <div style={{ fontSize: '0.875rem', opacity: 0.95 }}>Nhập mã <strong>MINI10</strong> để giảm ngay 10% cho đơn hàng đầu tiên!</div>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                <i className="fa-solid fa-gift" style={{ marginRight: '6px' }}></i>
+                Ưu đãi thành viên mới:
+              </div>
+              <div style={{ fontSize: '0.875rem', opacity: 0.95 }}>
+                Nhập mã <strong>WELCOME10</strong> để giảm ngay 10% cho đơn hàng đầu tiên!
+              </div>
             </div>
           </div>
 
@@ -133,6 +254,7 @@ export default function AuthContainer() {
                 type="button"
                 onClick={() => {
                   setActiveTab('login');
+                  setRegStep('form');
                   setErrorMessage('');
                 }}
                 style={{ fontSize: '1.2rem', fontWeight: 800, background: 'none', cursor: 'pointer', color: activeTab === 'login' ? 'var(--primary-color)' : 'var(--text-muted)' }}
@@ -168,6 +290,7 @@ export default function AuthContainer() {
               </div>
             )}
 
+            {/* TAB 1: LOGIN FORM */}
             {activeTab === 'login' ? (
               <form onSubmit={handleLoginSubmit}>
                 <div className="form-group">
@@ -196,7 +319,8 @@ export default function AuthContainer() {
                     <button
                       type="button"
                       onClick={() => setShowLoginPass(!showLoginPass)}
-                      style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', border: 'none' }}
+                      aria-label="Xem mật khẩu"
                     >
                       <i className={`fa-regular ${showLoginPass ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                     </button>
@@ -219,68 +343,187 @@ export default function AuthContainer() {
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleRegisterSubmit}>
-                <div className="form-group">
-                  <label className="form-label">Họ và tên</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Nguyễn Văn A"
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Email</label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="nguyenvana@gmail.com"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Mật khẩu (Tối thiểu 6 ký tự)</label>
-                  <div style={{ position: 'relative' }}>
+              /* TAB 2: REGISTER FLOW WITH OTP */
+              regStep === 'form' ? (
+                /* Step 1: Registration Form */
+                <form onSubmit={handleRegisterFormSubmit}>
+                  <div className="form-group">
+                    <label className="form-label">Họ và tên</label>
                     <input
-                      type={showRegPass ? 'text' : 'password'}
+                      type="text"
                       className="form-control"
-                      placeholder="••••••••"
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Nguyễn Văn A"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
                       required
-                      minLength={6}
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Email đăng ký</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      placeholder="nguyenvana@gmail.com"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Mật khẩu (Tối thiểu 6 ký tự)</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showRegPass ? 'text' : 'password'}
+                        className="form-control"
+                        placeholder="••••••••"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegPass(!showRegPass)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', border: 'none' }}
+                        aria-label="Xem mật khẩu"
+                      >
+                        <i className={`fa-regular ${showRegPass ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Xác nhận lại mật khẩu</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showRegConfirmPass ? 'text' : 'password'}
+                        className="form-control"
+                        placeholder="••••••••"
+                        value={regConfirmPassword}
+                        onChange={(e) => setRegConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegConfirmPass(!showRegConfirmPass)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', border: 'none' }}
+                        aria-label="Xem mật khẩu xác nhận"
+                      >
+                        <i className={`fa-regular ${showRegConfirmPass ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-lg"
+                    style={{ width: '100%', marginTop: 'var(--space-md)' }}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <i className="fa-solid fa-spinner fa-spin"></i> Đang gửi mã xác thực...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-envelope" style={{ marginRight: '6px' }}></i>
+                        Tiếp tục & Nhận mã OTP 6 số
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                /* Step 2: 6-Digit OTP Verification Form */
+                <form onSubmit={handleVerifyOtpSubmit}>
+                  <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', marginBottom: '12px' }}>
+                      <i className="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      Xác Minh Tài Khoản
+                    </h3>
+                    <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      Mã xác minh 6 số đã được gửi tới email: <br />
+                      <strong style={{ color: 'var(--text-main)' }}>{regEmail}</strong>
+                    </p>
+                  </div>
+
+                  <div className="form-group" style={{ textAlign: 'center' }}>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>
+                      Nhập mã OTP 6 số
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="••••••"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      maxLength={6}
+                      autoFocus
+                      required
+                      style={{
+                        textAlign: 'center',
+                        fontSize: '1.6rem',
+                        fontWeight: 800,
+                        letterSpacing: '8px',
+                        padding: '12px',
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-lg"
+                    style={{ width: '100%', marginTop: 'var(--space-md)' }}
+                    disabled={isSubmitting || otpCode.length !== 6}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <i className="fa-solid fa-spinner fa-spin"></i> Đang xác minh mã OTP...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-check" style={{ marginRight: '6px' }}></i>
+                        Xác minh & Hoàn tất đăng ký
+                      </>
+                    )}
+                  </button>
+
+                  {/* Resend OTP & Back Controls */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px', fontSize: '0.85rem' }}>
                     <button
                       type="button"
-                      onClick={() => setShowRegPass(!showRegPass)}
-                      style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      onClick={() => {
+                        setRegStep('form');
+                        setErrorMessage('');
+                      }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <i className={`fa-regular ${showRegPass ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                      <i className="fa-solid fa-arrow-left"></i>
+                      <span>Đổi email khác</span>
                     </button>
-                  </div>
-                </div>
 
-                <button
-                  type="submit"
-                  className="btn btn-accent btn-lg"
-                  style={{ width: '100%', marginTop: 'var(--space-md)' }}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <i className="fa-solid fa-spinner fa-spin"></i> Đang tạo tài khoản...
-                    </>
-                  ) : (
-                    'Đăng ký tài khoản'
-                  )}
-                </button>
-              </form>
+                    {canResend ? (
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary-color)', fontWeight: 700, cursor: 'pointer' }}
+                        disabled={isSubmitting}
+                      >
+                        <i className="fa-solid fa-arrow-rotate-right" style={{ marginRight: '4px' }}></i>
+                        Gửi lại mã OTP
+                      </button>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        Gửi lại mã sau ({resendTimer}s)
+                      </span>
+                    )}
+                  </div>
+                </form>
+              )
             )}
           </div>
         </div>
@@ -288,4 +531,3 @@ export default function AuthContainer() {
     </main>
   );
 }
-

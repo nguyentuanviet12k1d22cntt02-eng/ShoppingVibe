@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 
-export type AdminTab = 'overview' | 'products' | 'orders' | 'customers' | 'coupons' | 'settings';
+export type AdminTab = 'overview' | 'products' | 'orders' | 'coupons' | 'customers' | 'chat' | 'settings';
 
 interface AdminSidebarProps {
   activeNav: AdminTab;
@@ -50,6 +50,12 @@ export default function AdminSidebar({ activeNav, onNavClick }: AdminSidebarProp
           <a onClick={() => onNavClick('customers')}>
             <i className="fa-solid fa-users"></i>
             <span>Khách hàng</span>
+          </a>
+        </li>
+        <li className={`admin-nav-item ${activeNav === 'chat' ? 'active' : ''}`}>
+          <a onClick={() => onNavClick('chat')}>
+            <i className="fa-solid fa-comments"></i>
+            <span>Live Chat & CSKH</span>
           </a>
         </li>
         <li className={`admin-nav-item ${activeNav === 'settings' ? 'active' : ''}`}>

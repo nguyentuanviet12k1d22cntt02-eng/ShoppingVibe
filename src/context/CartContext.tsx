@@ -61,8 +61,37 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [cart, isMounted]);
 
   const addToCart = (product: Product, quantity = 1, selectedVariant?: SelectedVariant) => {
+    // Check if out of stock
+    const maxStock = product.stockCount !== undefined ? product.stockCount : 99;
+    if (product.inStock === false || maxStock <= 0) {
+      showToast(`Sản phẩm "${product.name}" hiện đã hết hàng trong kho!`, 'error');
+      return;
+    }
+
     const variantKey = selectedVariant ? `${product.id}-${selectedVariant.id}` : product.id;
     const finalPrice = product.price + (selectedVariant ? Number(selectedVariant.priceAdjustment || 0) : 0);
+
+    const existingItem = cart.find(item => item.cartItemId === variantKey || item.id === variantKey);
+    const currentQtyInCart = existingItem ? existingItem.quantity : 0;
+    const targetTotalQty = currentQtyInCart + quantity;
+
+    if (targetTotalQty > maxStock) {
+      const allowedAdd = Math.max(0, maxStock - currentQtyInCart);
+      if (allowedAdd <= 0) {
+        showToast(`Bạn đã thêm tối đa ${maxStock} sản phẩm (bằng tồn kho hiện có)!`, 'warning');
+        return;
+      }
+      // Add up to maxStock
+      setCart(prev =>
+        prev.map(item =>
+          item.cartItemId === variantKey || item.id === variantKey
+            ? { ...item, quantity: maxStock }
+            : item
+        )
+      );
+      showToast(`Chỉ có thể thêm thêm ${allowedAdd} món do số lượng tồn kho có hạn (${maxStock} món)!`, 'warning');
+      return;
+    }
 
     setCart(prev => {
       const existingIdx = prev.findIndex(item => item.cartItemId === variantKey || item.id === variantKey);
@@ -89,10 +118,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const updateCartQuantity = (cartItemIdOrProductId: string, delta: number) => {
     setCart(prev => {
+      const itemToUpdate = prev.find(item => item.cartItemId === cartItemIdOrProductId || item.id === cartItemIdOrProductId);
+      if (!itemToUpdate) return prev;
+
+      const maxStock = itemToUpdate.stockCount !== undefined ? itemToUpdate.stockCount : 99;
+      const newQty = itemToUpdate.quantity + delta;
+
+      if (newQty > maxStock) {
+        showToast(`Số lượng tối đa có thể mua là ${maxStock} sản phẩm (theo tồn kho)!`, 'warning');
+        return prev.map(item =>
+          item.cartItemId === cartItemIdOrProductId || item.id === cartItemIdOrProductId
+            ? { ...item, quantity: maxStock }
+            : item
+        );
+      }
+
       return prev
         .map(item => {
           if (item.cartItemId === cartItemIdOrProductId || item.id === cartItemIdOrProductId) {
-            const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
           return item;
@@ -106,10 +149,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       removeFromCart(cartItemIdOrProductId);
       return;
     }
+
     setCart(prev => {
+      const itemToUpdate = prev.find(item => item.cartItemId === cartItemIdOrProductId || item.id === cartItemIdOrProductId);
+      if (!itemToUpdate) return prev;
+
+      const maxStock = itemToUpdate.stockCount !== undefined ? itemToUpdate.stockCount : 99;
+      let finalQty = quantity;
+
+      if (quantity > maxStock) {
+        showToast(`Chỉ còn ${maxStock} sản phẩm trong kho. Đã tự động giới hạn về ${maxStock}.`, 'warning');
+        finalQty = maxStock;
+      }
+
       return prev.map(item =>
         item.cartItemId === cartItemIdOrProductId || item.id === cartItemIdOrProductId
-          ? { ...item, quantity }
+          ? { ...item, quantity: finalQty }
           : item
       );
     });
