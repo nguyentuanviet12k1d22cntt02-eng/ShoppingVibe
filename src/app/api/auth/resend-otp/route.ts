@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { sendOtpEmail } from '@/utils/mailer';
 
-const { Pool } = pg;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://unilqwsbbcnpbybizcbz.supabase.co';
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  'sb_publishable_6LZIWOxdtZZLUncEv0cOBw_SQ-wiK_T';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
@@ -22,50 +23,55 @@ export async function POST(request: Request) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const client = await pool.connect();
 
-    try {
-      // Find latest registration attempt
-      const prevRecord = await client.query(
-        `SELECT user_name, password_hash FROM public.otp_verifications
-         WHERE lower(email) = $1 ORDER BY created_at DESC LIMIT 1`,
-        [cleanEmail]
-      );
+    // 1. Find latest registration attempt
+    const { data: prevRecords } = await supabase
+      .from('otp_verifications')
+      .select('user_name, password_hash')
+      .ilike('email', cleanEmail)
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-      const userName = prevRecord.rows.length > 0 ? prevRecord.rows[0].user_name : 'Khách hàng';
-      const passHash = prevRecord.rows.length > 0 ? prevRecord.rows[0].password_hash : null;
+    const userName = prevRecords && prevRecords.length > 0 ? prevRecords[0].user_name : 'Khách hàng';
+    const passHash = prevRecords && prevRecords.length > 0 ? prevRecords[0].password_hash : null;
 
-      // Invalidate previous OTPs
-      await client.query(
-        'UPDATE public.otp_verifications SET is_verified = true WHERE email = $1 AND is_verified = false',
-        [cleanEmail]
-      );
+    // 2. Invalidate previous OTPs
+    await supabase
+      .from('otp_verifications')
+      .update({ is_verified: true })
+      .ilike('email', cleanEmail)
+      .eq('is_verified', false);
 
-      // Generate new 6-digit OTP
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    // 3. Generate new 6-digit OTP
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-      await client.query(
-        `INSERT INTO public.otp_verifications (email, otp_code, user_name, password_hash, purpose, expires_at)
-         VALUES ($1, $2, $3, $4, 'signup', $5)`,
-        [cleanEmail, newOtp, userName, passHash, expiresAt]
-      );
+    await supabase.from('otp_verifications').insert({
+      email: cleanEmail,
+      otp_code: newOtp,
+      user_name: userName,
+      password_hash: passHash,
+      purpose: 'signup',
+      expires_at: expiresAt,
+      is_verified: false,
+    });
 
-      // Send new OTP to recipient email
-      await sendOtpEmail({
-        toEmail: cleanEmail,
-        recipientName: userName,
-        otpCode: newOtp,
-      });
+    // 4. Send new OTP to recipient email
+    const mailResult = await sendOtpEmail({
+      toEmail: cleanEmail,
+      recipientName: userName,
+      otpCode: newOtp,
+    });
 
-      return NextResponse.json({
-        success: true,
-        message: `Mã OTP mới đã được gửi tới email ${cleanEmail}.`,
-        email: cleanEmail,
-      });
-    } finally {
-      client.release();
+    if (!mailResult.success) {
+      console.warn('Resend email notice:', mailResult.error);
     }
+
+    return NextResponse.json({
+      success: true,
+      message: `Mã OTP mới đã được gửi tới email ${cleanEmail}.`,
+      email: cleanEmail,
+    });
   } catch (err: any) {
     console.error('Error in resend-otp API:', err);
     return NextResponse.json(

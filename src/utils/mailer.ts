@@ -6,15 +6,22 @@ interface SendOtpEmailParams {
   otpCode: string;
 }
 
-export async function sendOtpEmail({ toEmail, recipientName, otpCode }: SendOtpEmailParams): Promise<{ success: boolean; error?: string }> {
+export async function sendOtpEmail({
+  toEmail,
+  recipientName,
+  otpCode,
+}: SendOtpEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
-    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
-    const smtpPass = (process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+    const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || 'nguyentuanviet12k1@gmail.com';
+    const smtpPass = (
+      process.env.SMTP_PASS ||
+      process.env.GMAIL_APP_PASSWORD ||
+      'fnkeehthdrgifwmv'
+    ).replace(/\s+/g, '');
 
     let transporter: nodemailer.Transporter;
 
     if (smtpUser && smtpPass) {
-      // Use Gmail SMTP service directly
       transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -23,7 +30,6 @@ export async function sendOtpEmail({ toEmail, recipientName, otpCode }: SendOtpE
         },
       });
     } else {
-      // Create fallback test account
       const testAccount = await nodemailer.createTestAccount();
       transporter = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
@@ -72,23 +78,17 @@ export async function sendOtpEmail({ toEmail, recipientName, otpCode }: SendOtpE
     `;
 
     const info = await transporter.sendMail({
-      from: `"Mini Shop Artisan" <${smtpUser || 'no-reply@minishop.vn'}>`,
+      from: `"Mini Shop Artisan" <${smtpUser}>`,
       to: toEmail,
       subject: `[Mini Shop] ${otpCode} là mã xác minh đăng ký tài khoản của bạn`,
       text: `Xin chào ${recipientName}, mã xác thực OTP của bạn là: ${otpCode}. Mã có hiệu lực trong 10 phút.`,
       html: htmlContent,
     });
 
-    console.log(`\n======================================================`);
-    console.log(`📨 [MAILER] ĐÃ GỬI EMAIL CHỨA MÃ OTP THÀNH CÔNG`);
-    console.log(`-> Người gửi: ${smtpUser}`);
-    console.log(`-> Người nhận: ${toEmail}`);
-    console.log(`-> Message ID: ${info.messageId}`);
-    console.log(`======================================================\n`);
-
+    console.log(`📨 [MAILER] Đã gửi OTP đến: ${toEmail} (ID: ${info.messageId})`);
     return { success: true };
   } catch (err: any) {
     console.error('❌ Lỗi khi gửi email OTP:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message || 'Lỗi gửi email' };
   }
 }

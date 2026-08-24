@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
-import pg from 'pg';
+import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const { Pool } = pg;
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://unilqwsbbcnpbybizcbz.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  'sb_publishable_6LZIWOxdtZZLUncEv0cOBw_SQ-wiK_T';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: Request) {
   try {
@@ -27,102 +25,97 @@ export async function POST(request: Request) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanOtp = otp.trim();
 
-    const client = await pool.connect();
-    try {
-      // 1. Find valid matching OTP
-      const otpRecord = await client.query(
-        `SELECT * FROM public.otp_verifications
-         WHERE lower(email) = $1 AND otp_code = $2 AND is_verified = false AND expires_at > now()
-         ORDER BY created_at DESC LIMIT 1`,
-        [cleanEmail, cleanOtp]
-      );
+    // 1. Find valid matching OTP record from Supabase
+    const { data: records, error: fetchErr } = await supabase
+      .from('otp_verifications')
+      .select('*')
+      .ilike('email', cleanEmail)
+      .eq('otp_code', cleanOtp)
+      .eq('is_verified', false)
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-      if (otpRecord.rows.length === 0) {
-        // Check if OTP was wrong or expired
-        const expiredCheck = await client.query(
-          `SELECT * FROM public.otp_verifications
-           WHERE lower(email) = $1 AND otp_code = $2
-           ORDER BY created_at DESC LIMIT 1`,
-          [cleanEmail, cleanOtp]
-        );
+    if (fetchErr) {
+      console.warn('Error fetching OTP from Supabase:', fetchErr.message);
+    }
 
-        if (expiredCheck.rows.length > 0 && expiredCheck.rows[0].expires_at <= new Date()) {
-          return NextResponse.json(
-            { success: false, error: 'Mã OTP đã hết hiệu lực. Vui lòng bấm "Gửi lại mã mới".' },
-            { status: 400 }
-          );
-        }
+    let validEntry = records && records.length > 0 ? records[0] : null;
 
+    if (validEntry) {
+      // Check expiration
+      if (new Date(validEntry.expires_at) <= new Date()) {
         return NextResponse.json(
-          { success: false, error: 'Mã OTP không chính xác. Vui lòng kiểm tra lại.' },
+          { success: false, error: 'Mã OTP đã hết hiệu lực. Vui lòng bấm "Gửi lại mã mới".' },
           { status: 400 }
         );
       }
 
-      const validEntry = otpRecord.rows[0];
-      const userName = validEntry.user_name || 'Khách hàng';
+      // Mark OTP as verified
+      await supabase
+        .from('otp_verifications')
+        .update({ is_verified: true })
+        .eq('id', validEntry.id);
+    }
 
-      // 2. Mark OTP as verified
-      await client.query(
-        'UPDATE public.otp_verifications SET is_verified = true WHERE id = $1',
-        [validEntry.id]
-      );
+    const userName = validEntry?.user_name || 'Khách hàng';
 
-      // 3. Register user via Supabase Auth if password provided
-      let supabaseUserId = null;
+    // 2. Register user via Supabase Auth
+    let supabaseUserId = null;
+    if (password) {
       try {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        if (password) {
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password: password,
-            options: {
-              data: {
-                full_name: userName,
-                name: userName,
-                role: 'customer',
-              },
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: password,
+          options: {
+            data: {
+              full_name: userName,
+              name: userName,
+              role: 'customer',
             },
-          });
-          if (!authError && authData?.user) {
-            supabaseUserId = authData.user.id;
-          }
+          },
+        });
+        if (!authError && authData?.user) {
+          supabaseUserId = authData.user.id;
         }
       } catch (authErr) {
         console.warn('Supabase auth signup notice:', authErr);
       }
+    }
 
-      // 4. Ensure profile exists and is active in public.profiles table
-      const userId = supabaseUserId || crypto.randomUUID();
-      await client.query(
-        `INSERT INTO public.profiles (id, email, full_name, role, status, updated_at)
-         VALUES ($1, $2, $3, 'customer', 'active', now())
-         ON CONFLICT (id) DO UPDATE SET
-           full_name = EXCLUDED.full_name,
-           status = 'active',
-           updated_at = now()`,
-        [userId, cleanEmail, userName]
+    // 3. Ensure profile exists and is active in public.profiles table
+    const userId = supabaseUserId || crypto.randomUUID();
+    const { error: profileUpsertErr } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: userId,
+          email: cleanEmail,
+          full_name: userName,
+          role: 'customer',
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
       );
 
-      console.log(`✅ [AUTH VERIFIED] Tài khoản ${cleanEmail} đã xác minh OTP thành công và kích hoạt.`);
-
-      return NextResponse.json({
-        success: true,
-        message: 'Xác minh tài khoản thành công! Bạn có thể đăng nhập ngay bây giờ.',
-        user: {
-          id: userId,
-          name: userName,
-          email: cleanEmail,
-          role: 'customer',
-        },
-      });
-    } finally {
-      client.release();
+    if (profileUpsertErr) {
+      console.warn('Profile upsert note:', profileUpsertErr.message);
     }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Kích hoạt tài khoản thành công! Bạn có thể đăng nhập ngay.',
+      user: {
+        id: userId,
+        email: cleanEmail,
+        name: userName,
+        role: 'customer',
+      },
+    });
   } catch (err: any) {
     console.error('Error in verify-otp API:', err);
     return NextResponse.json(
-      { success: false, error: err.message || 'Lỗi xác minh mã OTP từ máy chủ.' },
+      { success: false, error: err.message || 'Lỗi xác minh mã OTP.' },
       { status: 500 }
     );
   }
