@@ -11,6 +11,17 @@ export default function ProductCard({ product }: { product: Product }) {
   const { toggleWishlist, isWishlisted } = useWishlist();
   const { addToCart } = useCart();
   const wishlisted = isWishlisted(product.id);
+  const [imgSrc, setImgSrc] = React.useState<string>(
+    product.image && !product.image.startsWith('blob:')
+      ? product.image
+      : '/assets/images/products/noi-that/ban/ban-1.jpg'
+  );
+
+  React.useEffect(() => {
+    if (product.image && !product.image.startsWith('blob:')) {
+      setImgSrc(product.image);
+    }
+  }, [product.image]);
 
   // Calculate mock original price for discount badge
   const discountPercent = product.featured ? 15 : 0;
@@ -29,13 +40,14 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="product-card-img-wrapper" style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', overflow: 'hidden' }}>
         <Link href={`/products/${product.id}`} style={{ display: 'block', width: '100%', height: '100%', position: 'relative' }}>
           <Image
-            src={product.image}
+            src={imgSrc}
             alt={product.name}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             className="product-card-img"
             style={{ objectFit: 'cover', filter: isOutOfStock ? 'grayscale(40%)' : 'none' }}
             priority={false}
+            onError={() => setImgSrc('/assets/images/products/noi-that/ban/ban-1.jpg')}
           />
         </Link>
 
