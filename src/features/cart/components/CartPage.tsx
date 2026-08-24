@@ -147,29 +147,47 @@ export default function CartPage() {
                         <td style={{ fontWeight: 600 }}>{formatCurrency(item.price)}</td>
 
                         <td>
-                          <div className="quantity-control">
-                            <button
-                              type="button"
-                              className="qty-btn"
-                              onClick={() => updateQuantity(itemKey, item.quantity - 1)}
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              className="qty-input"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(itemKey, parseInt(e.target.value || '1', 10))}
-                              min="1"
-                            />
-                            <button
-                              type="button"
-                              className="qty-btn"
-                              onClick={() => updateQuantity(itemKey, item.quantity + 1)}
-                            >
-                              +
-                            </button>
-                          </div>
+                          {(() => {
+                            const maxStock = item.stockCount !== undefined ? item.stockCount : 99;
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <div className="quantity-control">
+                                  <button
+                                    type="button"
+                                    className="qty-btn"
+                                    onClick={() => updateQuantity(itemKey, item.quantity - 1)}
+                                    disabled={item.quantity <= 1}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    className="qty-input"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const parsed = parseInt(e.target.value || '1', 10);
+                                      if (isNaN(parsed) || parsed < 1) updateQuantity(itemKey, 1);
+                                      else if (parsed > maxStock) updateQuantity(itemKey, maxStock);
+                                      else updateQuantity(itemKey, parsed);
+                                    }}
+                                    min="1"
+                                    max={maxStock}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="qty-btn"
+                                    onClick={() => updateQuantity(itemKey, item.quantity + 1)}
+                                    disabled={item.quantity >= maxStock}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <span style={{ fontSize: '0.72rem', color: item.quantity >= maxStock ? '#d97706' : 'var(--text-muted)' }}>
+                                  {item.quantity >= maxStock ? `(Tối đa kho: ${maxStock})` : `(Còn ${maxStock} món)`}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td style={{ fontWeight: 800, color: 'var(--primary-color)' }}>

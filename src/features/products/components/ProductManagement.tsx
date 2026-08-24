@@ -43,13 +43,14 @@ export default function ProductManagement() {
 
   const handleOpenEditModal = (prod: Product) => {
     setEditingProdId(prod.id.toString());
+    const stockVal = prod.stockCount !== undefined ? prod.stockCount : 0;
     setFormData({
       name: prod.name,
       category: prod.category,
       price: prod.price.toString(),
       image: prod.image,
-      stockCount: (prod.stockCount || 15).toString(),
-      inStock: prod.inStock !== false,
+      stockCount: stockVal.toString(),
+      inStock: prod.inStock !== false && stockVal > 0,
     });
     setIsModalOpen(true);
   };
@@ -70,6 +71,8 @@ export default function ProductManagement() {
 
     const priceNum = parseInt(formData.price, 10) || 0;
     const defaultImg = formData.image.trim() || '/assets/images/products/do-my-nghe/binh-gom-trang-tri.webp';
+    const parsedStock = Math.max(0, parseInt(formData.stockCount, 10) || 0);
+    const finalInStock = formData.inStock && parsedStock > 0;
 
     if (editingProdId !== null) {
       updateProduct(editingProdId, {
@@ -78,8 +81,8 @@ export default function ProductManagement() {
         categoryName: getCategoryLabel(formData.category),
         price: priceNum,
         image: defaultImg,
-        inStock: formData.inStock,
-        stockCount: parseInt(formData.stockCount, 10) || 15,
+        inStock: finalInStock,
+        stockCount: parsedStock,
       });
     } else {
       const newId = `p${Date.now()}`;
@@ -90,8 +93,8 @@ export default function ProductManagement() {
         categoryName: getCategoryLabel(formData.category),
         price: priceNum,
         image: defaultImg,
-        inStock: formData.inStock,
-        stockCount: parseInt(formData.stockCount, 10) || 15,
+        inStock: finalInStock,
+        stockCount: parsedStock,
         featured: true,
         description: 'Sản phẩm mới vừa được tạo từ trang Quản trị Admin.',
         sku: `SKU-NEW-${Math.floor(10 + Math.random() * 90)}`,
@@ -268,12 +271,12 @@ export default function ProductManagement() {
                     <td style={{ fontWeight: 800, color: 'var(--text-main)' }}>
                       {formatCurrency(prod.price)}
                     </td>
-                    <td style={{ fontWeight: 800, color: 'var(--primary-color)' }}>
-                      {prod.stockCount || 15}
+                    <td style={{ fontWeight: 800, color: (prod.stockCount ?? 0) > 0 && prod.inStock !== false ? 'var(--primary-color)' : '#ef4444' }}>
+                      {prod.inStock === false || (prod.stockCount ?? 0) <= 0 ? 0 : (prod.stockCount ?? 0)}
                     </td>
                     <td>
-                      <span className={`status-pill ${prod.inStock !== false ? 'instock' : 'outstock'}`}>
-                        {prod.inStock !== false ? 'Còn hàng' : 'Hết hàng'}
+                      <span className={`status-pill ${(prod.stockCount ?? 0) > 0 && prod.inStock !== false ? 'instock' : 'outstock'}`}>
+                        {(prod.stockCount ?? 0) > 0 && prod.inStock !== false ? 'Còn hàng' : 'Hết hàng'}
                       </span>
                     </td>
                     <td>

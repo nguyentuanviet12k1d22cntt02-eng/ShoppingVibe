@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreSettings } from '@/features/admin/types/admin.types';
+import { useToast } from '@/context/ToastContext';
 
 export default function SystemSettings() {
+  const { showToast } = useToast();
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     storeName: 'Mini Shop - Không Gian Sống Mộc Mạc',
     phone: '0912 345 678',
@@ -19,14 +21,52 @@ export default function SystemSettings() {
     themeColor: '#2e7d32'
   });
 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [showSettingsToast, setShowSettingsToast] = useState<boolean>(false);
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        setIsLoading(true);
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data.success && data.settings) {
+          setStoreSettings(data.settings);
+        }
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowSettingsToast(true);
-    setTimeout(() => {
-      setShowSettingsToast(false);
-    }, 3000);
+    try {
+      setIsSaving(true);
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeSettings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowSettingsToast(true);
+        showToast('Đã lưu cấu hình hệ thống lên Database thành công!', 'success');
+        setTimeout(() => {
+          setShowSettingsToast(false);
+        }, 3000);
+      } else {
+        showToast(data.error || 'Lỗi khi lưu cấu hình', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi kết nối máy chủ', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -230,6 +270,7 @@ export default function SystemSettings() {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="submit"
+            disabled={isSaving}
             className="btn btn-primary"
             style={{
               padding: '12px 28px',
@@ -239,11 +280,13 @@ export default function SystemSettings() {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              boxShadow: '0 4px 12px rgba(46, 125, 50, 0.2)'
+              boxShadow: '0 4px 12px rgba(46, 125, 50, 0.2)',
+              opacity: isSaving ? 0.7 : 1,
+              cursor: isSaving ? 'not-allowed' : 'pointer'
             }}
           >
-            <i className="fa-solid fa-floppy-disk"></i>
-            <span>Lưu cấu hình hệ thống</span>
+            <i className={isSaving ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-floppy-disk"}></i>
+            <span>{isSaving ? 'Đang lưu cấu hình...' : 'Lưu cấu hình hệ thống'}</span>
           </button>
         </div>
       </form>

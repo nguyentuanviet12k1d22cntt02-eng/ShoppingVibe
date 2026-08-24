@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PRODUCTS, Product } from '@/data/products';
-import { MOCK_CUSTOMERS, MOCK_ORDERS, Order } from '@/features/admin/data/adminMockData';
+import { Order } from '@/features/admin/data/adminMockData';
 import { Customer } from '@/features/customers/types/customers.types';
 
 import AdminSidebar, { AdminTab } from '@/components/layout/AdminSidebar';
@@ -13,6 +13,7 @@ import OrderManagement from '@/features/orders/components/OrderManagement';
 import CustomerManagement from '@/features/customers/components/CustomerManagement';
 import CouponManagement from '@/features/coupons/components/CouponManagement';
 import SystemSettings from '@/features/admin/components/SystemSettings';
+import LiveChatManagement from '@/features/admin/components/LiveChatManagement';
 import { useProducts } from '@/context/ProductContext';
 import { useAuth } from '@/context/AuthContext';
 
@@ -48,20 +49,22 @@ export default function AdminPage() {
     setAnimKey(prev => prev + 1);
   };
   const [ordersList, setOrdersList] = useState<Order[]>([]);
-  const [customersList, setCustomersList] = useState<Customer[]>(MOCK_CUSTOMERS);
+  const [customersList, setCustomersList] = useState<Customer[]>([]);
 
-  // Load orders from Supabase
+  // Load orders & customers from Supabase
   React.useEffect(() => {
-    async function loadOrders() {
+    async function loadData() {
       try {
         const { createClient } = await import('@/utils/supabase/client');
         const supabase = createClient();
-        const { data: dbOrders, error } = await supabase
+        
+        // 1. Fetch real orders
+        const { data: dbOrders, error: orderErr } = await supabase
           .from('orders')
           .select('*, order_items(*)')
           .order('order_date', { ascending: false });
 
-        if (error) throw error;
+        if (orderErr) throw orderErr;
         if (dbOrders && dbOrders.length > 0) {
           const mapped: Order[] = dbOrders.map(o => {
             const items = (o.order_items || []).map((it: any) => ({
@@ -91,6 +94,7 @@ export default function AdminPage() {
               notes: o.notes || undefined,
               total: Number(o.total_amount || 0),
               date: dateStr,
+              rawDate: o.order_date || '',
               paymentMethod: (o.payment_method === 'bank_transfer' ? 'bank_transfer' : 'cod') as 'cod' | 'bank_transfer',
               paymentStatus: (o.payment_status === 'paid' || o.payment_status === 'completed' ? 'paid' : 'pending') as 'paid' | 'pending',
               shippingStatus: (o.shipping_status || 'pending') as Order['shippingStatus'],
@@ -100,45 +104,18 @@ export default function AdminPage() {
           setOrdersList(mapped);
         }
 
-        // Load customers from Supabase profiles
-        const { data: dbProfiles } = await supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (dbProfiles && dbProfiles.length > 0) {
-          const avatarBgs = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
-          const mappedCustomers: Customer[] = dbProfiles.map((p, idx) => {
-            const userOrders = (dbOrders || []).filter(o => o.customer_email === p.email);
-            const totalSpend = userOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-            const ordersCount = userOrders.length;
-
-            let level: Customer['level'] = 'bronze';
-            if (totalSpend >= 10000000) level = 'platinum';
-            else if (totalSpend >= 5000000) level = 'gold';
-            else if (totalSpend >= 2000000) level = 'silver';
-
-            return {
-              id: `CUST-${String(idx + 1).padStart(3, '0')}`,
-              name: p.full_name || 'Khách hàng',
-              email: p.email || '',
-              phone: userOrders[0]?.customer_phone || '0901234567',
-              level,
-              totalSpend: totalSpend > 0 ? totalSpend : 1250000,
-              ordersCount: ordersCount > 0 ? ordersCount : 1,
-              joinDate: p.created_at ? p.created_at.split('T')[0] : '2026-08-01',
-              avatarBg: avatarBgs[idx % avatarBgs.length],
-              status: 'active',
-            };
-          });
-          setCustomersList(mappedCustomers);
+        // 2. Fetch real customers from /api/customers
+        const custRes = await fetch('/api/customers');
+        const custData = await custRes.json();
+        if (custData.success && custData.customers) {
+          setCustomersList(custData.customers);
         }
       } catch (err) {
         console.error('Failed to load orders and customers from Supabase:', err);
       }
     }
 
-    loadOrders();
+    loadData();
   }, []);
 
   if (!isAuthMounted || isAuthLoading) {
@@ -216,7 +193,12 @@ export default function AdminPage() {
 
         {/* TAB 1: OVERVIEW */}
         {activeNav === 'overview' && (
-          <DashboardOverview animKey={animKey} productsList={productsList} />
+          <DashboardOverview
+            animKey={animKey}
+            productsList={productsList}
+            ordersList={ordersList}
+            customersList={customersList}
+          />
         )}
 
         {/* TAB 2: PRODUCTS */}
@@ -239,7 +221,12 @@ export default function AdminPage() {
           <CustomerManagement customersList={customersList} setCustomersList={setCustomersList} />
         )}
 
-        {/* TAB 6: SETTINGS */}
+        {/* TAB 6: LIVE CHAT & CSKH */}
+        {activeNav === 'chat' && (
+          <LiveChatManagement />
+        )}
+
+        {/* TAB 7: SETTINGS */}
         {activeNav === 'settings' && (
           <SystemSettings />
         )}

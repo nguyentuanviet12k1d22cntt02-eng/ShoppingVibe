@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create a lookup map for price & metadata verification
-    const productLookup = new Map<string, { name: string; price: number; image: string }>();
+    const productLookup = new Map<string, { name: string; price: number; image: string; stockCount: number; inStock: boolean }>();
 
     // Seed with static products first
     PRODUCTS.forEach(p => {
@@ -66,6 +66,8 @@ export async function POST(req: NextRequest) {
         name: p.name,
         price: Number(p.price),
         image: p.image,
+        stockCount: p.stockCount ?? 99,
+        inStock: p.inStock !== false,
       });
     });
 
@@ -76,11 +78,13 @@ export async function POST(req: NextRequest) {
           name: p.name,
           price: Number(p.price),
           image: p.image || '/assets/images/products/do-my-nghe/binh-gom-trang-tri.webp',
+          stockCount: p.stock_count !== null && p.stock_count !== undefined ? Number(p.stock_count) : 99,
+          inStock: Boolean(p.in_stock),
         });
       });
     }
 
-    // 3. Calculate verified subtotal on the server
+    // 3. Calculate verified subtotal & validate stock availability on the server
     let calculatedSubtotal = 0;
     const verifiedOrderItems: Array<{
       product_id: string;
@@ -100,6 +104,25 @@ export async function POST(req: NextRequest) {
       }
 
       const validQuantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+      // Stock validation
+      if (!prodInfo.inStock || prodInfo.stockCount <= 0) {
+        return NextResponse.json(
+          { success: false, error: `Rất tiếc! Sản phẩm "${prodInfo.name}" hiện đã hết hàng trong kho.` },
+          { status: 400 }
+        );
+      }
+
+      if (validQuantity > prodInfo.stockCount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Sản phẩm "${prodInfo.name}" chỉ còn lại ${prodInfo.stockCount} món trong kho (bạn đặt ${validQuantity} món). Vui lòng giảm số lượng để tiếp tục!`,
+          },
+          { status: 400 }
+        );
+      }
+
       const adj = Math.max(0, Number(item.priceAdjustment || 0));
       const finalItemPrice = prodInfo.price + adj;
       const itemTotal = finalItemPrice * validQuantity;
@@ -197,7 +220,7 @@ export async function POST(req: NextRequest) {
         .eq('id', appliedCouponData.id);
     }
 
-    // 7. Insert order items
+    // 8. Insert order items
     const itemsToInsert = verifiedOrderItems.map(it => ({
       order_id: generatedOrderId,
       ...it,
@@ -213,6 +236,37 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Lỗi khi lưu danh sách chi tiết đơn hàng.' },
         { status: 500 }
       );
+    }
+
+    // 9. Deduct stock inventory & increment sold_count in Supabase database
+    for (const item of verifiedOrderItems) {
+      try {
+        const prodInfo = productLookup.get(item.product_id);
+        if (prodInfo) {
+          const newStock = Math.max(0, prodInfo.stockCount - item.quantity);
+          const updates: any = {
+            stock_count: newStock,
+            in_stock: newStock > 0,
+          };
+          // Fetch current sold_count from db to increment
+          const { data: currentDbProd } = await supabase
+            .from('products')
+            .select('sold_count')
+            .eq('id', item.product_id)
+            .single();
+
+          if (currentDbProd) {
+            updates.sold_count = (currentDbProd.sold_count || 0) + item.quantity;
+          }
+
+          await supabase
+            .from('products')
+            .update(updates)
+            .eq('id', item.product_id);
+        }
+      } catch (stockErr) {
+        console.warn(`Could not update stock for product ${item.product_id}:`, stockErr);
+      }
     }
 
     return NextResponse.json({

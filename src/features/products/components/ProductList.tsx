@@ -21,9 +21,11 @@ export default function ProductList() {
   useEffect(() => {
     const s = searchParams.get('search') || '';
     const c = searchParams.get('category') || searchParams.get('cat') || 'all';
+    const srt = searchParams.get('sort') || 'default';
     setIsLoading(true);
     setSearchQuery(s);
     setSelectedCat(c);
+    setSortOption(srt);
     setCurrentPage(1);
 
     const timer = setTimeout(() => {
@@ -110,6 +112,10 @@ export default function ProductList() {
       result.sort((a, b) => b.price - a.price);
     } else if (sortOption === 'name') {
       result.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortOption === 'newest') {
+      result.reverse();
+    } else if (sortOption === 'bestseller') {
+      result.sort((a, b) => a.price - b.price);
     }
 
     return result;
@@ -252,6 +258,8 @@ export default function ProductList() {
                   onChange={(e) => handleSortChange(e.target.value)}
                 >
                   <option value="default">Mặc định nổi bật</option>
+                  <option value="newest">Hàng mới về</option>
+                  <option value="bestseller">Bán chạy nhất / Ưu đãi</option>
                   <option value="price-low">Giá: Thấp đến Cao</option>
                   <option value="price-high">Giá: Cao đến Thấp</option>
                   <option value="name">Tên sản phẩm: A-Z</option>
