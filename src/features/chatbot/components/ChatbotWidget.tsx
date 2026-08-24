@@ -25,11 +25,6 @@ export default function ChatbotWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // If user is Admin or currently browsing admin pages, do NOT render the customer chatbot widget
-  if (pathname?.startsWith('/admin') || user?.role === 'admin') {
-    return null;
-  }
-
   // Initialize or restore session ID
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -172,6 +167,11 @@ export default function ChatbotWidget() {
       setIsBotActive(true);
     }
   };
+
+  // If user is Admin or currently browsing admin pages, do NOT render the customer chatbot widget
+  if (pathname?.startsWith('/admin') || user?.role === 'admin') {
+    return null;
+  }
 
   return (
     <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, fontFamily: 'inherit' }}>
